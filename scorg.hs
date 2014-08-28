@@ -52,4 +52,4 @@ emailStringList gr = map (\s -> (show $ object $ head $ query gr (Just s) (Just 
 
 
   
-main = parseLocal "/home/lars/etc/contacts.turtle" >>= return.emailStringList >>= print
+main = parseLocal "/home/lars/etc/contacts.turtle" >>= (\g -> runUi g)-- return.emailStringList >>= print
