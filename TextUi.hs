@@ -35,10 +35,10 @@ type SC = StateT SCState IO
 
 
 
-
+{- TODO: use a map for more descriptive style indicees -}
 styles:: [CursesH.Style]
-styles = [ CursesH.defaultStyle
-         , CursesH.AttributeStyle [CursesH.Bold] CursesH.GreenF CursesH.DarkBlueB
+styles = [ CursesH.defaultStyle  
+         , CursesH.AttributeStyle [CursesH.Bold] CursesH.GreenF CursesH.DarkBlueB -- Highlight style
          ]
 
 {-| Resize Window
@@ -53,7 +53,7 @@ resize f = do liftIO $ do Curses.endWin
 
 redraw:: Widget w => w -> SC ()
 redraw w = do sz <- getSize
-              liftIO $ draw (0, 0) (getHeight sz , getWidth sz -1 ) DHNormal w
+              liftIO $ draw (0, 0) (getHeight sz , getWidth sz -1 ) DHNormal w -- FIXME: Why o Why do I need -1
               liftIO $ Curses.refresh
               
 
@@ -64,7 +64,7 @@ nthStyle :: Int -> SC CursesH.CursesStyle
 nthStyle n =  gets sc_styles >>= (\cs -> return $ cs !! n)
 
 lineStyle = nthStyle 1
-textBoxStyle = nthStyle 1
+textBoxStyle = nthStyle 0
 
 lineDrawingStyle = lineStyle    >>= return.mkDrawingStyle
 textDrawingStyle = textBoxStyle >>= return.mkDrawingStyle
@@ -75,6 +75,12 @@ textFillOptions =
      return $ TWOptions { twopt_size = TWSizeFixed $ trace (show sz) sz, --(getHeight sz, getWidth sz),
                           twopt_style = ds,
                           twopt_halign = AlignLeft }
+lineOptions =
+    do sz <- getSize
+       ds <- lineDrawingStyle
+       return $ TWOptions { twopt_size = TWSizeFixed (1, getWidth sz - 1),
+                            twopt_style = ds,
+                            twopt_halign = AlignLeft }
 
 
 {-| Main Window Keyboard Listener
@@ -86,7 +92,7 @@ eventloop w = do k <- CursesH.getKey (resize mkMainWidget)
                    _ -> eventloop w
 
 
-{-
+
 
 {- TODO make top and bottomline into lines with contents for left, right and centre (similar to fancyhdr in LaTeχ)
 -}
@@ -96,38 +102,72 @@ type BottomlineWidget = TextWidget
 
 
      
-mkToplineWidget = do opts <- lineOptions
-                     return $ newTextWidget (opts { twopt_halign = AlignCenter }) "title"
-mkBottomlineWidget = do opts <- lineOptions
-                        return $ newTextWidget (opts { twopt_halign = AlignLeft }) "title" 
+mkToplineWidget =
+  do opts <- lineOptions
+     return $ newTextWidget (opts { twopt_halign = AlignLeft }) "Topline"
+mkBottomlineWidget =
+  do opts <- lineOptions
+     return $ newTextWidget (opts { twopt_halign = AlignRight }) "Bottomline" 
 
-{-
-data ColumnWidget = ColumnWidget
+
+
+{-| Column List Widget
+    Depicts a column of linewise browsable Entries
+-}
+data ListWidget = ListWidget
                     { entries :: [String]
                     }
-                    
-instance Widget ColumnWidget where
-  draw pos sz hint w = draw pos sz hint (mkRealColumnWidget w)
-  minSize w = minSize (mkRealColumnWidget w)
+-- draw:: Pos -> Size -> DrawingHint -> a -> IO
+instance Widget ListWidget where
+  draw pos sz hint w = draw pos sz hint (mkRealListWidget (Just $ TWSizeFixed sz) w)
+  minSize w = minSize (mkRealListWidget Nothing w)
 
-mkColumnWidget l = do return $ ColumnWidget l
+mkListWidget l = do return $ ListWidget l
 
-mkRealColumnWidget w = do opts <- lineOptions -- TODO: Create columnOpts
-                          return $ newTextWidget (opts {twopt_halign = AlignLeft})
-                            (intercalate "\n" (entries w))
+mkRealListWidget msz w =
+  let opts = case msz of
+        Nothing -> defaultTWOptions
+        Just sz -> defaultTWOptions {twopt_size = sz } 
+  in newTextWidget opts (intercalate "\n" (entries w)) 
+
+
+{-| BrowserWidget provides the main view consisting of 3 Lists/Columns
 -}
+data BrowserWidget = BrowserWidget
+                     { left:: ListWidget
+                     , centre:: ListWidget
+                     , right:: ListWidget
+                     }
+instance Widget BrowserWidget where
+  draw pos sz hint w = draw pos sz hint (mkRealBrowserWidget (Just sz) w)
+  minSize w = minSize (mkRealBrowserWidget Nothing w)
 
-                
-type ColumnWidget = EmptyWidget
+mkBrowserWidget:: SC BrowserWidget
+mkBrowserWidget = do
+  l <- mkListWidget ["Left1", "Left2"]
+  c <- mkListWidget ["Centre1", "Centre2", "Centre3"]
+  r <- mkListWidget ["Right1"]
+  return $ BrowserWidget l c r
+                           
+mkRealBrowserWidget msz b =
+  let row = [ TableCell $ left b
+            , TableCell $ centre b
+            , TableCell $ right b ]
+      opts = case msz of
+        Nothing -> defaultTBWOptions
+        Just sz -> defaultTBWOptions { tbwopt_minSize = sz }
+  in newTableWidget opts [row]
 
-mkColumnWidget = EmptyWidget ((getHeight getSize), (getWidth getSize) `div` 3)
+{-  let opts = textFillOptions -- TODO: Create columnOpts
+                     in newTextWidget (opts {twopt_halign = AlignLeft})
+                                               (intercalate "\n" (entries w))
+-}
+-------------------------------------------------------------------------------------------
 
 data MainWidget = MainWidget
-                  { toplineWidget :: ToplineWidget
-                  , bottomlineWidget :: BottomlineWidget
-                  , columnAWidget :: ColumnWidget
-                  , columnBWidget :: ColumnWidget
-                  , columnCWidget :: ColumnWidget
+                  { topline :: ToplineWidget
+                  , bottomline :: BottomlineWidget
+                  , browser :: BrowserWidget
                   }
 instance Widget MainWidget where
   draw pos sz hint w = draw pos sz hint (mkRealMainWidget (Just sz) w)
@@ -137,33 +177,27 @@ mkMainWidget:: SC MainWidget
 mkMainWidget = do
   tlw <- mkToplineWidget
   blw <- mkBottomlineWidget
-  colA <- mkColumnWidget [] 
-  colB <- mkColumnWidget [] -- TODO: Init with all subjects/or initial query
-  colC <- mkColumnWidget [] 
-  return $ MainWidget tlw blw colA colB colC
+  bro <- mkBrowserWidget
+  return $ MainWidget tlw blw bro
 
 mkRealMainWidget msz w =
-  let rows = [ [ TableCell $ toplineWidget w
-               ]
-             , [ TableCell $ columnAWidget w
-               , TableCell $ columnBWidget w
-               , TableCell $ columnCWidget w
-               ]
-             , [ TableCell $ bottomlineWidget w
-               ]
+  let cells = [ TableCell $ topline w
+             , TableCell $ browser w
+             , TableCell $ bottomline w
              ]
---      rows = map singletonRow cells
+      rows = map singletonRow cells
       opts = case msz of
-        Nothing -> defaultTBWOptions
-        Just sz -> defaultTBWOptions { tbwopt_minSize = sz }
+        Nothing -> defaultTBWOptions 
+        Just sz -> defaultTBWOptions { tbwopt_minSize = sz
+                                     , tbwopt_fillCol = Just 2
+                                     , tbwopt_fillRow = None}
   in newTableWidget opts rows
 
--}
 
 
 
-mkMainWidget:: SC TextWidget
-mkMainWidget = textFillOptions >>= return.(flip newTextWidget) "Main Window"
+
+-- mkMainWidget = textFillOptions >>= (return.(flip newTextWidget) "Main Window")
 --  do opts <- textFillOptions
 --                  return $ newTextWidget defaultTWOptions "Main Window" 
 
