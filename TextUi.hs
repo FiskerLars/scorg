@@ -70,10 +70,6 @@ textBoxStyle = nthStyle 0
 lineDrawingStyle = lineStyle    >>= return.mkDrawingStyle
 textDrawingStyle = textBoxStyle >>= return.mkDrawingStyle
 
-browserWidgetOptions =
-  do sz <- getSize
-     return $ defaultTBWOptions {
-       tbwopt_minSize = ( getHeight sz -2, getWidth sz -1) } --FIXME: Why -1?
 
 textFillOptions =
   do sz <- getSize
@@ -122,19 +118,30 @@ mkBottomlineWidget =
 
 type ListWidget = TableWidget
 
-mkListWidget:: Size -> [String] -> ListWidget
-mkListWidget (h,w) l = 
-  let opts =  defaultTBWOptions {tbwopt_minSize = (h,w) }
-  in newTableWidget opts $ map (row w) l
+mkListRows:: Int -> [String] -> [Row]
+mkListRows w l = map (row w) l
   where
     row w s = [ TableCell $ newTextWidget (defaultTWOptions {twopt_size = TWSizeFixed (1, w-1 )} ) s]
 
+mkListWidget:: Size -> [String] -> ListWidget
+mkListWidget s l = 
+  let opts =  defaultTBWOptions {tbwopt_minSize = s }
+  in newTableWidget opts $ mkListRows (getWidth s) l
 
 
 {-| BrowserWidget provides the main view consisting of 3 Lists/Columns
 -}
 type BrowserWidget = TableWidget
 
+browserWidgetOptions =
+  do sz <- getSize
+     return $ defaultTBWOptions {
+       tbwopt_minSize = ( getHeight sz -2, getWidth sz -1) --FIXME: Why -1?
+       , tbwopt_activeCols = [1]}
+
+
+{- TODO: reduce width of left column, divide rest between centre and right
+-}
 mkBrowserWidget:: SC BrowserWidget
 mkBrowserWidget = do 
   opts <- browserWidgetOptions
