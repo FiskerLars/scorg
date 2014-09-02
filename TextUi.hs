@@ -52,9 +52,10 @@ resize f = do liftIO $ do Curses.endWin
 
 
 redraw:: Widget w => w -> SC ()
-redraw w = do sz <- getSize
-              liftIO $ draw (0, 0) (getHeight sz , getWidth sz -1 ) DHNormal w -- FIXME: Why o Why do I need -1
-              liftIO $ Curses.refresh
+redraw w =
+  do sz <- getSize
+     liftIO $ draw (0, 0) (getHeight sz , getWidth sz -1 ) DHNormal w -- FIXME: Why o Why do I need -1
+     liftIO $ Curses.refresh
               
 
 getSize:: MonadIO m => m Size
@@ -68,6 +69,11 @@ textBoxStyle = nthStyle 0
 
 lineDrawingStyle = lineStyle    >>= return.mkDrawingStyle
 textDrawingStyle = textBoxStyle >>= return.mkDrawingStyle
+
+browserWidgetOptions =
+  do sz <- getSize
+     return $ defaultTBWOptions {
+       tbwopt_minSize = ( getHeight sz -2, getWidth sz -1) } --FIXME: Why -1?
 
 textFillOptions =
   do sz <- getSize
@@ -100,7 +106,6 @@ type ToplineWidget = TextWidget
 type BottomlineWidget = TextWidget
 
 
-
      
 mkToplineWidget =
   do opts <- lineOptions
@@ -114,6 +119,7 @@ mkBottomlineWidget =
 {-| Column List Widget
     Depicts a column of linewise browsable Entries
 -}
+{-
 data ListWidget = ListWidget
                     { entries :: [String]
                     }
@@ -121,19 +127,28 @@ data ListWidget = ListWidget
 instance Widget ListWidget where
   draw pos sz hint w = draw pos sz hint (mkRealListWidget (Just $ TWSizeFixed sz) w)
   minSize w = minSize (mkRealListWidget Nothing w)
-
-mkListWidget l = do return $ ListWidget l
-
 mkRealListWidget msz w =
   let opts = case msz of
         Nothing -> defaultTWOptions
         Just sz -> defaultTWOptions {twopt_size = sz } 
   in newTextWidget opts (intercalate "\n" (entries w)) 
+-}
+
+type ListWidget = TableWidget
+
+mkListWidget:: Size -> [String] -> ListWidget
+mkListWidget (h,w) l = 
+  let opts =  defaultTBWOptions {tbwopt_minSize = (h,w) }
+  in newTableWidget opts $ map (row w) l
+  where
+    row w s = [ TableCell $ newTextWidget (defaultTWOptions {twopt_size = TWSizeFixed (1, w-1 )} ) s]
+
 
 
 {-| BrowserWidget provides the main view consisting of 3 Lists/Columns
 -}
-data BrowserWidget = BrowserWidget
+type BrowserWidget = TableWidget
+{-data BrowserWidget = BrowserWidget
                      { left:: ListWidget
                      , centre:: ListWidget
                      , right:: ListWidget
@@ -141,23 +156,30 @@ data BrowserWidget = BrowserWidget
 instance Widget BrowserWidget where
   draw pos sz hint w = draw pos sz hint (mkRealBrowserWidget (Just sz) w)
   minSize w = minSize (mkRealBrowserWidget Nothing w)
+-}
 
 mkBrowserWidget:: SC BrowserWidget
-mkBrowserWidget = do
-  l <- mkListWidget ["Left1", "Left2"]
-  c <- mkListWidget ["Centre1", "Centre2", "Centre3"]
-  r <- mkListWidget ["Right1"]
-  return $ BrowserWidget l c r
-                           
+mkBrowserWidget = do 
+  opts <- browserWidgetOptions
+  let
+    w = getWidth $ tbwopt_minSize opts
+    h = getHeight $ tbwopt_minSize opts
+    row = [ TableCell $ mkListWidget (h, w `div` 3) ["Left1", "Left2"]
+          , TableCell $ mkListWidget (h, w `div` 3) ["Centre1", "Centre2", "Centre3"]
+          , TableCell $ mkListWidget (h, w `div` 3) ["Right1"]
+          ]
+  return $ newTableWidget opts [row]
+--  return $ BrowserWidget l c r
+{-                           
 mkRealBrowserWidget msz b =
   let row = [ TableCell $ left b
-            , TableCell $ centre b
-            , TableCell $ right b ]
+             , TableCell $ centre b
+             , TableCell $ right b ]
       opts = case msz of
-        Nothing -> defaultTBWOptions
-        Just sz -> defaultTBWOptions { tbwopt_minSize = sz }
+        Nothing -> browserWidgetOptions
+        Just sz -> browserWidgetOptions { tbwopt_minSize = sz }
   in newTableWidget opts [row]
-
+-}
 {-  let opts = textFillOptions -- TODO: Create columnOpts
                      in newTextWidget (opts {twopt_halign = AlignLeft})
                                                (intercalate "\n" (entries w))
@@ -182,15 +204,13 @@ mkMainWidget = do
 
 mkRealMainWidget msz w =
   let cells = [ TableCell $ topline w
-             , TableCell $ browser w
-             , TableCell $ bottomline w
-             ]
+              , TableCell $ browser w
+              , TableCell $ bottomline w
+              ]
       rows = map singletonRow cells
       opts = case msz of
         Nothing -> defaultTBWOptions 
-        Just sz -> defaultTBWOptions { tbwopt_minSize = sz
-                                     , tbwopt_fillCol = Just 2
-                                     , tbwopt_fillRow = None}
+        Just sz -> defaultTBWOptions { tbwopt_minSize = sz }
   in newTableWidget opts rows
 
 
