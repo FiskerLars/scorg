@@ -119,20 +119,6 @@ mkBottomlineWidget =
 {-| Column List Widget
     Depicts a column of linewise browsable Entries
 -}
-{-
-data ListWidget = ListWidget
-                    { entries :: [String]
-                    }
--- draw:: Pos -> Size -> DrawingHint -> a -> IO
-instance Widget ListWidget where
-  draw pos sz hint w = draw pos sz hint (mkRealListWidget (Just $ TWSizeFixed sz) w)
-  minSize w = minSize (mkRealListWidget Nothing w)
-mkRealListWidget msz w =
-  let opts = case msz of
-        Nothing -> defaultTWOptions
-        Just sz -> defaultTWOptions {twopt_size = sz } 
-  in newTextWidget opts (intercalate "\n" (entries w)) 
--}
 
 type ListWidget = TableWidget
 
@@ -148,15 +134,6 @@ mkListWidget (h,w) l =
 {-| BrowserWidget provides the main view consisting of 3 Lists/Columns
 -}
 type BrowserWidget = TableWidget
-{-data BrowserWidget = BrowserWidget
-                     { left:: ListWidget
-                     , centre:: ListWidget
-                     , right:: ListWidget
-                     }
-instance Widget BrowserWidget where
-  draw pos sz hint w = draw pos sz hint (mkRealBrowserWidget (Just sz) w)
-  minSize w = minSize (mkRealBrowserWidget Nothing w)
--}
 
 mkBrowserWidget:: SC BrowserWidget
 mkBrowserWidget = do 
@@ -169,21 +146,7 @@ mkBrowserWidget = do
           , TableCell $ mkListWidget (h, w `div` 3) ["Right1"]
           ]
   return $ newTableWidget opts [row]
---  return $ BrowserWidget l c r
-{-                           
-mkRealBrowserWidget msz b =
-  let row = [ TableCell $ left b
-             , TableCell $ centre b
-             , TableCell $ right b ]
-      opts = case msz of
-        Nothing -> browserWidgetOptions
-        Just sz -> browserWidgetOptions { tbwopt_minSize = sz }
-  in newTableWidget opts [row]
--}
-{-  let opts = textFillOptions -- TODO: Create columnOpts
-                     in newTextWidget (opts {twopt_halign = AlignLeft})
-                                               (intercalate "\n" (entries w))
--}
+
 -------------------------------------------------------------------------------------------
 
 data MainWidget = MainWidget
