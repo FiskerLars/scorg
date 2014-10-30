@@ -9,14 +9,15 @@ module LatexOutput (Latex,
 import Data.List
 import Data.Maybe
 import Data.Monoid
-import RdfBibliography
 import qualified Data.Text as T
 import qualified Data.RDF as R
+
 
 import Debug.Hood.Observe
 
 
-
+import RdfBibliography
+import AcademicTerm
 
 
 
@@ -78,7 +79,7 @@ genericRighthandEntry g s = intercalate "\\\\\n" [authors,
                      
 
 genericLefthandEntry:: String -> Latex
-genericLefthandEntry s = "\\ecvTagPlainValueRagged{" ++ s ++ "}\n"
+genericLefthandEntry s = "\\ecvTagPlainValueRagged{" ++ s ++ "}"
 {-| Given an ordered list of publications (RDF subjects), generate entry list.
 -}
 publicationYear:: R.RDF a => a -> [R.Subject] -> Latex
@@ -154,10 +155,10 @@ latexAppendMaybe a b = fromMaybe mempty $ a >>= return.(++ b)
 
 teachRightHandEntry:: R.RDF a => a -> R.Subject ->  Latex
 teachRightHandEntry g s = fromMaybe "" ((eventTypeStr $ typeOf g s) >>= return.(++ ": "))
-                          ++ (R.view $ head $ titlesOf g s) -- ++ (academicTermStr g s)
+                          ++ (R.view $ titleOf g s) 
                           where
                             academicTermStr g s = R.view 
-                                                  $ titleOf g (academicTermOf g s) 
+                                                  $ nameOf g (academicTermOf g s) 
                             eventTypeStr e | e == practiseTypeObj = Just "Practise"
                                            | e == seminarTypeObj  = Just "Seminar"
                                            | e == lectureTypeObj  = Just "Lecture"
@@ -172,13 +173,15 @@ teachLatexYear:: R.RDF a => a ->  [R.Subject] -> Latex
 teachLatexYear g xs =  observe "teachLatexYear"
                        $ foldr (\(l,r) x -> l ++ r ++ x) mempty
                        $ zip
-                         ((R.view $ shortNameOf g (academicTermOf g $ head xs)):(repeat $ genericLefthandEntry ""))
-                         $ map (teachRightHandEntry g) xs
+                         (genericLefthandEntry (shortNameOf g (academicTermOf g $ head xs)):(repeat $ genericLefthandEntry ""))
+                         $ map (\x -> "{" ++ (teachRightHandEntry g x) ++ "}") xs
   where
-    shortNameOf g s = head $ abbreviationsOf g s ++ titlesOf g s
+    shortNameOf g s = R.view $ nameOf g s -- TODO use abbrev
+
+
 
 groupByAcademicTerm:: R.RDF a => a -> [R.Subject] -> [[R.Subject]]
-groupByAcademicTerm g = groupBy (\s s' ->  (observe "aT" $ academicTermOf g $ observe "s" s) == (observe "aT'" $ academicTermOf g $ observe "s'" s'))
+groupByAcademicTerm g = groupBy (\s s' ->  (academicTermOf g s) == (academicTermOf g s'))
 
 
 {- TODO separate autonomous teaching from supervised teaching from thesis advisor
@@ -189,18 +192,23 @@ groupByTypeClasses = undefined
 sortTeachingEntries:: R.RDF a => a -> [R.Subject] -> [R.Subject]
 sortTeachingEntries g = sortBy lectureOrdering
                         where
-                          lectureOrdering s s' = yearOrdering (observe "year" $ yearOf g s) (observe "year'" $ yearOf g s') -- TODO: order Course,Lecture,.. (quality rang)
-                            where 
-                              yearOrdering y y' = compare (read $ R.view y::Integer) (read $ R.view y'::Integer)
+                          lectureOrdering s s' = compare (readATobj $ academicTermOf g s) (readATobj $ academicTermOf g s') -- FIXME: order by termTODO: order Course,Lecture,.. (quality rang)
+                            where
+                              readATobj:: R.Node -> AcademicTerm
+                              readATobj n = read $ tail $ R.view n 
+                              
 
 
 genericTeachingList:: R.RDF a => a -> [R.Subject] -> Latex
 genericTeachingList g = intercalate("\n")
-                        .(map $ (teachLatexYear g).(sortTeachingEntries g))
+                        .(map $ (teachLatexYear g)
+                        .(observe "sorted").(sortTeachingEntries g))
                         .(observe "grouped by Term").(groupByAcademicTerm g)
 
 
-defaultCourses = map ((R.unode).(T.pack)) [ "#ws14winfo", "#ws14lbas", "#ws13post"
+defaultCourses = map ((R.unode).(T.pack)) [ "#ws14winfo"
+                                          , "#ws14lbas"
+                                          , "#ws13post"
                                           , "#ss14mobsec"
                                           , "#ss14kuvs"
                                           , "#ws13post"

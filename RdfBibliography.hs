@@ -65,6 +65,10 @@ titlePred = mkUnode' dct "title"
 title:: TripleGenFkt
 title = flip literalTriple titlePred
 
+namePred = mkUnode' dct "name"
+name:: TripleGenFkt
+name = flip literalTriple namePred
+
 booktitlePred = mkUnode' dct "partOf"
 booktitle:: TripleGenFkt
 booktitle = flip literalTriple booktitlePred
@@ -74,6 +78,7 @@ publisher:: TripleGenFkt
 publisher = flip literalTriple publisherPred
 
 -- TODO parse time sensibly
+-- FIXME rename year to created
 yearPred = mkUnode' dct "created"
 year:: TripleGenFkt
 year  = flip literalTriple yearPred 
@@ -116,7 +121,9 @@ abbreviationPred = R.unode $ T.pack ":abbreviation"
 
 ------------- RDF Handling --------------------------
 queryObjects:: R.RDF a => a -> R.Subject -> R.Predicate -> [R.Object]
-queryObjects g s p = map R.objectOf $ observe "queryObj" $ R.query g (Just $ observe "query s" s) (Just $ observe "query p" p) Nothing
+queryObjects g s p = map R.objectOf
+                     $ observe ("queryObj " ++ (R.view s) ++ " " ++ (R.view p))
+                     $ R.query g (Just s) (Just p) Nothing
 objectsByPred:: R.RDF a => R.Predicate -> a -> R.Subject -> [R.Object]
 objectsByPred = flip (flip . queryObjects)
 
@@ -128,6 +135,8 @@ authorsOf = objectsByPred authorPred
 editorsOf = objectsByPred editorPred
 titlesOf  = objectsByPred titlePred
 titleOf   = (listhead.).titlesOf
+namesOf   = objectsByPred namePred
+nameOf    = (listhead.).namesOf
 abbreviationsOf = objectsByPred abbreviationPred
 yearsOf = objectsByPred yearPred
 yearOf  = (listhead.).yearsOf
@@ -151,8 +160,9 @@ instance R.View R.Node String where
   view (R.UNode t) = T.unpack t
   view (R.BNode t) = T.unpack t
   view (R.LNode (R.PlainL t)) = T.unpack t
-  view _ = undefined
-
+  view (R.LNode (R.PlainLL t l)) = T.unpack t -- FIXME, how to handle language
+  view (R.LNode (R.TypedL t u)) = T.unpack t -- FIXME how to handle encoding url
+  
 instance R.View R.Node T.Text where
   view (R.UNode t) = t
   view (R.BNode t) = t
