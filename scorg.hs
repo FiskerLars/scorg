@@ -1,5 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables,
-OverloadedStrings #-}
+OverloadedStrings, RankNTypes, ImpredicativeTypes #-}
 {-| ScOrg Science Process Organisation Tool
 
 * Contacts
@@ -19,6 +19,7 @@ sehr unübersichtlich und viel zu wenig automatisch
 
 import Data.List
 import Data.RDF as R
+import qualified Data.RDF.Namespace as N
 import Data.RDF.Query as Q
 import qualified Data.Text as T
 import System.Environment
@@ -30,6 +31,8 @@ import TextUi
 import BibTeXInput
 import LatexOutput
 
+import System.Console.GetOpt
+
 instance Observable R.TriplesGraph where
   observer = observeBase
 
@@ -37,12 +40,25 @@ instance Observable R.TriplesGraph where
 {-| Parser for turtle file int TriplesGraph
 -}
 parseLocal:: String -> IO R.TriplesGraph
-parseLocal file = R.parseFile (R.TurtleParser Nothing Nothing) file >>= (\r -> 
-                                              case r of
-                                                (Left _) -> return R.empty
-                                                (Right rdf) -> return rdf )
+parseLocal file = (R.parseFile (R.TurtleParser Nothing Nothing) file)
+                  >>= (\r -> 
+                        case r of
+                          (Left err ) -> error $ "Could not parse " ++ (file ++ (show err))-- return R.empty
+                          (Right rdf) -> return $ observe "RDF parsed" rdf )
                                                                
 
+
+parseMergeLocal:: [String] -> IO R.TriplesGraph
+parseMergeLocal [] = return R.empty
+parseMergeLocal gs = (sequence $ observe "parseMergeLocal map" $ map (observe "parseLocal" $ parseLocal) gs)
+                     >>= observe "parseMergeLocal" return.mergeGraphs
+
+
+mergeGraphs gs =  (\(m,t) -> R.mkRdf t Nothing m)
+                  $ foldl (\(maps,triples) g -> (N.mergePrefixMappings maps $ R.prefixMappings g
+                                                     , observe "merge triples" $ R.triplesOf g ++ triples )) (N.ns_mappings [],[]) gs 
+
+    
 persons:: RDF r => r -> [R.Subject]
 persons g = map Q.subjectOf
             $ query g (Nothing)
@@ -60,34 +76,44 @@ emailStringList gr = map (\s -> (show $ objectOf $ head $ query gr (Just s) (Jus
 
 
 
+---------------------------------------------------------------------------------
+-- Workers
 
+--parseBibTeX:: String -> IO [Entry.T]
+--bibTeXToRDF:: R.RDF a => [Entry.T] -> a
+printGraph::Worker
+printGraph g _ = putStrLn $ show g
 
 latexcv:: Worker
-latexcv opts = parseLocal (filename opts)
-               >>= return.((flip genCvLatex)(R.unode $ T.pack "#me"))
-               >>= putStrLn
-  where
-    filename (f:opts) = f
+latexcv g _ = putStrLn $ ((flip genCvLatex)(R.unode $ T.pack "#me")) g 
+
 
 latexlectures:: Worker
-latexlectures opts = observe "latexlectures" parseLocal (filename opts)
-                     >>= trace "lectures" return
-                     >>= return.((flip genericTeachingList) defaultCourses)
-                     >>= putStrLn
-  where
-    filename (f:opts) = f
+latexlectures g _ = putStrLn $ ((flip genericTeachingList) defaultCourses) g
+                    
 
 
-type Options = [String]
-type Worker = Options -> IO () 
+type Graph = R.TriplesGraph
+type Worker = Graph-> Options -> IO () 
 data Command = Command String Worker String
 commands:: [Command]
 commands = [ Command "cvlatex" latexcv
              "Generate a CV of me in LaTeX"
            , Command "lectureslatex" latexlectures
-           "Only the lectures part"]
+             "Only the lectures part"
+           , Command "publicationlatex" undefined
+             "Only the Publications (for debugging)"
+           , Command "printGraph" printGraph
+             "Output the known graph"
+           , Command "www" undefined
+             "Create My Homepage"
+           , Command "" (\_ _ -> mainUi)
+             "Default: run the main ui"
+           ]
 
-  
+
+
+
 {- lookup function matching cmd in List of commands -}
 lookupCmd:: [Command] -> String -> Maybe Worker
 lookupCmd cmds s = let
@@ -97,19 +123,60 @@ lookupCmd cmds s = let
     (Nothing)              -> Nothing
 
 
+-------------------------------------------------------------------
+--- CmdArguments
 
- 
+
+
+type ArgStr = [String]
+
+
+data Options = Options
+     { inputGraphs :: [String],
+       inputBibTex :: [String]} deriving Show
+
+instance Observable Options where
+  observer = observeBase
+
+defaultOptions = Options
+     { inputGraphs = [],
+       inputBibTex = []
+     }
+
+
+mainoptions =
+  [ Option [] ["ib"]     (ReqArg (\s o -> o {inputBibTex =  inputBibTex o ++ [s] })
+                        "bibtex include" )
+    "Insert BibTex File"
+  , Option [] ["ig"] (ReqArg (\s o -> o { inputGraphs = inputGraphs o ++ [s] })
+                      "input include" )
+    "Insert a RDF (turtle) File"
+  ]
+
+
+--- Startups
 
 mainUi:: IO ()                     
 mainUi = parseLocal "/home/lars/etc/contacts.turtle" >>= (\g -> runUi g)-- return.emailStringList >>= print
 
 
-main:: IO ()
-main = runO $ getArgs >>= cmdSelector 
-       where
-         cmdSelector:: Options -> IO ()
-         cmdSelector [] = mainUi
-         cmdSelector (cmd:args) = case lookupCmd commands cmd of
-           Nothing  -> error $ "Unknown cmd " ++ cmd
-           (Just w) -> w args
 
+
+main:: IO ()
+main = --runO $
+       do
+         args <- observe "Arguments" getArgs 
+         let (opts, nonOpts) = case getOpt Permute mainoptions args of
+               (o,n,[])   -> (observe "Opts" $ foldl (flip id) defaultOptions o, observe "nonOpts" n)
+               (_,_,errs) -> error ("Error " ++ (concat errs ++ usageInfo "Usage: " mainoptions))
+             (Just action) = lookupCmd commands $ case nonOpts of
+               []    -> error "no command given"
+               (c:_) -> observe "command given" c
+         bg <- bibtexGraphs    $ observe "BibTex input" $ inputBibTex opts
+         lg <- parseMergeLocal $ observe "inputGraphs" $ inputGraphs opts
+         action (mergeGraphs [bg, lg]) opts
+       where
+         bibtexGraphs bf = (sequence $ map (parseBibTeX) bf)
+                           >>= (\x -> (return.bibTeXToRDF.concat) x:: IO R.TriplesGraph)
+                           
+         
