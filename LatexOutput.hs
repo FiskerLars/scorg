@@ -1,4 +1,5 @@
-
+{-| Generate Latex Output from the graph. Currently implements my CV
+-}
 module LatexOutput (Latex,
                     genericPublicationList
                    , genericTeachingList
@@ -58,9 +59,11 @@ proceedings o 2012 5th IFIP International Conference on New Technologies, Mobili
 
 -}
 genericRighthandEntry:: R.RDF a => a -> R.Subject -> Latex
-genericRighthandEntry g s = intercalate "\\\\\n" [authors,
-                                                  title,
-                                                  publicationdata]
+genericRighthandEntry g s = '{': (intercalate "\\\\\n" [authors,
+                                                        title,
+                                                        publicationdata]
+                                 )
+                            ++ "}\n"
                    where
                      authors = latexCommasAnd $ map (R.view) $ authorsOf g s
                      title =   case titlesOf g s of
@@ -71,11 +74,11 @@ genericRighthandEntry g s = intercalate "\\\\\n" [authors,
                                               [booktitle, publisher, pages, year] of
                                          Nothing -> ""
                                          Just a -> (intercalate ", " a) 
-                     booktitle = Just $ R.view $ head $ booktitleOf g s -- FIXME no title
+                     booktitle = booktitleOf g s >>= return.(R.view)-- FIXME no title
                      publisher = Nothing -- ToDo
                      pages = Nothing --ToDo
                      year:: Maybe Latex
-                     year = Just $ R.view $ yearOf g s
+                     year = maybe Nothing (Just.(R.view)) (yearOf g s)
                      
 
 genericLefthandEntry:: String -> Latex
@@ -89,7 +92,7 @@ publicationYear g xs@(s:ss) = foldr (\(l,r) x -> l ++ r ++ x) mempty
                               (yearEntry:(repeat $ genericLefthandEntry ""))
                               (map (genericRighthandEntry g) xs)
   where
-    yearEntry = genericLefthandEntry $ R.view $ yearOf g s
+    yearEntry = genericLefthandEntry $ maybe "" (R.view) (yearOf g s)
 
 groupByYear:: R.RDF a => a -> [R.Subject] -> [[R.Subject]]
 groupByYear g  = groupBy (\s s' ->  (yearOf g s) == (yearOf g s'))
@@ -101,6 +104,7 @@ TODO: sortByYear
 -}
 genericPublicationList:: R.RDF a => a ->  [R.Subject] -> Latex
 genericPublicationList g xs = foldr (\ys l -> publicationYear g ys ++ l) mempty $ groupByYear g xs
+
 
 {-| Example List of Publications.
 TODO: fill up with my publications.
@@ -154,11 +158,11 @@ latexAppendMaybe::  Maybe [a] -> [a] -> [a]
 latexAppendMaybe a b = fromMaybe mempty $ a >>= return.(++ b)
 
 teachRightHandEntry:: R.RDF a => a -> R.Subject ->  Latex
-teachRightHandEntry g s = fromMaybe "" ((eventTypeStr $ typeOf g s) >>= return.(++ ": "))
-                          ++ (R.view $ titleOf g s) 
+teachRightHandEntry g s = fromMaybe "" ((typeOf g s >>= eventTypeStr) >>= return.(++ ": "))
+                          ++ (maybe "" (R.view) (titleOf g s)) 
                           where
-                            academicTermStr g s = R.view 
-                                                  $ nameOf g (academicTermOf g s) 
+                            academicTermStr g s = maybe "" (R.view) 
+                                                  $ (academicTermOf g s) >>= (nameOf g) 
                             eventTypeStr e | e == practiseTypeObj = Just "Practise"
                                            | e == seminarTypeObj  = Just "Seminar"
                                            | e == lectureTypeObj  = Just "Lecture"
@@ -173,10 +177,12 @@ teachLatexYear:: R.RDF a => a ->  [R.Subject] -> Latex
 teachLatexYear g xs =  observe "teachLatexYear"
                        $ foldr (\(l,r) x -> l ++ r ++ x) mempty
                        $ zip
-                         (genericLefthandEntry (shortNameOf g (academicTermOf g $ head xs)):(repeat $ genericLefthandEntry ""))
-                         $ map (\x -> "{" ++ (teachRightHandEntry g x) ++ "}") xs
+                         ((genericLefthandEntry $ maybe "" (shortNameOf g) (academicTermOf g $ head xs))
+                          :(repeat $ genericLefthandEntry ""))
+                         $ map (\x -> "{" ++ (teachRightHandEntry g x) ++ "}\n") xs
   where
-    shortNameOf g s = R.view $ nameOf g s -- TODO use abbrev
+    shortNameOf:: R.RDF a => a -> R.Subject -> String
+    shortNameOf g s = maybe "" (R.view) (nameOf g s) -- TODO use abbrev
 
 
 
@@ -192,18 +198,20 @@ groupByTypeClasses = undefined
 sortTeachingEntries:: R.RDF a => a -> [R.Subject] -> [R.Subject]
 sortTeachingEntries g = sortBy lectureOrdering
                         where
-                          lectureOrdering s s' = compare (readATobj $ academicTermOf g s) (readATobj $ academicTermOf g s') -- FIXME: order by termTODO: order Course,Lecture,.. (quality rang)
+                          lectureOrdering s s' = compare
+                                                 (academicTermOf g s >>= return.readATobj)
+                                                 (academicTermOf g s' >>= return.readATobj) -- FIXME: order by termTODO: order Course,Lecture,.. (quality rang)
                             where
                               readATobj:: R.Node -> AcademicTerm
-                              readATobj n = read $ tail $ R.view n 
+                              readATobj = read.tail.(R.view)
                               
 
 
 genericTeachingList:: R.RDF a => a -> [R.Subject] -> Latex
 genericTeachingList g = intercalate("\n")
                         .(map $ (teachLatexYear g)
-                        .(observe "sorted").(sortTeachingEntries g))
-                        .(observe "grouped by Term").(groupByAcademicTerm g)
+                        .(sortTeachingEntries g))
+                        .(groupByAcademicTerm g)
 
 
 defaultCourses = map ((R.unode).(T.pack)) [ "#ws14winfo"
@@ -244,20 +252,42 @@ defaultCourses = map ((R.unode).(T.pack)) [ "#ws14winfo"
 
 {-| generate a CV of a given person
 -}
-genCvLatex:: R.RDF a => a -> R.Subject -> Latex
-genCvLatex g s = latexHeader
-                 ++ contactInfo
-                 ++ experience
-                 ++ (genericPublicationList g myPublications)
+genCvLatex:: R.RDF a => a -> R.Subject -> IO Latex
+genCvLatex g s = (sequence $ [ latexHeader
+                             , contactInfo
+                             , experience
+                             , pubList
+                             , education
+                             , talks
+                             , teaching
+                             , latexFooter])
+                 >>= return.(foldl (++) "")
+{-                 ++ experience
+                 ++ (genericPublicationList g $ observe "myPubs" myPublications)
                  ++ education
                  ++ talks
                  ++ (genericTeachingList g defaultCourses)
                  ++ latexFooter
-
+-}
   where
-    latexHeader = ""
-    latexFooter = ""
-    contactInfo = ""
-    experience  = ""
-    education   = ""
-    talks       = ""
+    latexHeader = readFile "/tmp/header.tex"
+{-
+      return "\\documentclass[utf8, a4paper, 12pt, english, oneside]{ecv-plus}\
+\\\usepackage{xltxtra}\
+\\\usepackage{ecv-plusNLS}\
+\\\ecvName{Lars Fischer}\
+\\\begin{document}\
+\\\ecvPortrait{./portrait02-bw.jpg}\
+\\\begin{ecv}" -- TODO name and image from graph
+-}
+    latexFooter = readFile "/tmp/footer.tex"
+    contactInfo = return ""
+    experience  = return $ experienceTitle ++ ""
+    pubList     = return $ (++) pubListTitle $ genericPublicationList g $ observe "myPubs" myPublications
+    teaching    = return $ (++) teachingTitle $ genericTeachingList g defaultCourses
+    education   = return ""
+    talks       = return ""
+
+teachingTitle = "\\ecvSection{Teaching \\ecvExperience}"
+experienceTitle = "\\ecvBreakSection{\\ecvExperience}"
+pubListTitle = "\\ecvSection{\\ecvPublications{}}"

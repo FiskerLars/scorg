@@ -10,6 +10,7 @@ module RdfBibliography where
 
 
 import Data.List
+import Data.Maybe
 import qualified Data.Map as M
 import qualified Data.Text as T
 import qualified Data.RDF as R
@@ -23,11 +24,12 @@ instance Observable R.Node where
 instance Observable R.Triple where
   observer = observeBase
 
+bibliographyMappings = N.mergePrefixMappings N.standard_ns_mappings $ N.ns_mappings [ bibo ]
+
 pubGraph:: R.RDF a => R.Triples -> a
-pubGraph triples = R.mkRdf triples Nothing biboMapping 
+pubGraph triples = R.mkRdf triples Nothing bibliographyMappings
   where
-    addPubPrefix g = R.addPrefixMappings g biboMapping True
-    biboMapping = N.mergePrefixMappings N.standard_ns_mappings $ N.ns_mappings [ bibo ]
+    addPubPrefix g = R.addPrefixMappings g bibliographyMappings True
 
 bibo:: N.Namespace
 bibo  = N.mkPrefixedNS' "bibo" "http://purl.org/ontology/bibo/#"
@@ -127,29 +129,30 @@ queryObjects g s p = map R.objectOf
 objectsByPred:: R.RDF a => R.Predicate -> a -> R.Subject -> [R.Object]
 objectsByPred = flip (flip . queryObjects)
 
+
 listhead = Data.List.head
 
 typesOf = objectsByPred typePred
-typeOf  = (listhead.).typesOf -- listhead.(typesOf g) 
+typeOf  = (listToMaybe.).typesOf -- listhead.(typesOf g) 
 authorsOf = objectsByPred authorPred
 editorsOf = objectsByPred editorPred
 titlesOf  = objectsByPred titlePred
-titleOf   = (listhead.).titlesOf
+titleOf   = (listToMaybe.).titlesOf
 namesOf   = objectsByPred namePred
-nameOf    = (listhead.).namesOf
+nameOf    = (listToMaybe.).namesOf
 abbreviationsOf = objectsByPred abbreviationPred
 yearsOf = objectsByPred yearPred
-yearOf  = (listhead.).yearsOf
-booktitleOf = objectsByPred booktitlePred
-booktitleof = booktitleOf --Legacy
+yearOf  = (listToMaybe.).yearsOf
+booktitlesOf = objectsByPred booktitlePred
+booktitleOf = (listToMaybe.).booktitlesOf 
 pdfurlOf    = objectsByPred pdfurlPred -- flip (queryObjects g) pdfurlPred
 timestampsOf  = objectsByPred timestampPred 
-timestampOf   = (listhead.).timestampsOf
+timestampOf   = (listToMaybe.).timestampsOf
 
 -- teaching experiences
 academicTermsOf:: R.RDF a => a -> R.Subject -> [R.Object]
 academicTermsOf = objectsByPred academicTermPred  
-academicTermOf  = (listhead.).academicTermsOf 
+academicTermOf  = (listToMaybe.).academicTermsOf 
 
 
 -- ToDo create instances R.View R.Node String

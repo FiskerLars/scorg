@@ -4,7 +4,8 @@ primary use is to generate my webpage/CV
 
 - Bibtex
 -}
-module BibTeXInput ( parseBibTeX,bibTeXToRDF
+module BibTeXInput ( parseBibTeX
+                   , bibTeXToRDF
                     )  where
 
 
@@ -21,7 +22,6 @@ import Data.Char
 
 
 import Control.Exception.Base
-import Debug.Trace
 import Control.Monad
 import System.IO
 
@@ -49,7 +49,7 @@ bib2RDFmap = M.fromList [  ("author", authorSplitGen authorPred)
                          ]
              where singleton:: (R.Subject -> T.Text -> R.Triple) -> R.Subject -> T.Text -> R.Triples
                    singleton f s t = f s t:[]
-                   authorSplitGen p s t = map ((literalTriple s p).(T.pack).(\a -> trace (show a) a)) $ Parse.splitAuthorList$ T.unpack t
+                   authorSplitGen p s t = map ((literalTriple s p).(T.pack).(\a -> a)) $ Parse.splitAuthorList$ T.unpack t
                    splitFiles:: T.Text -> [(T.Text,T.Text)] -- returns (file,type)
                    splitFiles = pairwise.(T.splitOn (T.pack ":"))
                    pairwise [] = []
