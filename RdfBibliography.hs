@@ -11,6 +11,7 @@ module RdfBibliography where
 
 import Data.List
 import Data.Maybe
+import Control.Applicative
 import qualified Data.Map as M
 import qualified Data.Text as T
 import qualified Data.RDF as R
@@ -122,6 +123,7 @@ abbreviationPred = R.unode $ T.pack ":abbreviation"
 
 
 ------------- RDF Handling --------------------------
+-- Todo: move to generic RDF-Lib
 queryObjects:: R.RDF a => a -> R.Subject -> R.Predicate -> [R.Object]
 queryObjects g s p = map R.objectOf
                      $ observe ("queryObj " ++ (R.view s) ++ " " ++ (R.view p))
@@ -152,6 +154,7 @@ timestampOf   = (listToMaybe.).timestampsOf
 -- teaching experiences
 academicTermsOf:: R.RDF a => a -> R.Subject -> [R.Object]
 academicTermsOf = objectsByPred academicTermPred  
+academicTermOf:: R.RDF a => a -> R.Subject -> Maybe (R.Object)
 academicTermOf  = (listToMaybe.).academicTermsOf 
 
 
@@ -171,3 +174,23 @@ instance R.View R.Node T.Text where
   view (R.BNode t) = t
   view (R.LNode (R.PlainL t)) = t
   view _ = undefined
+
+
+
+{- Group subjects by year-attribute -}
+groupByYear:: R.RDF a => a -> [R.Subject] -> [[R.Subject]]
+groupByYear g  = groupBy (\s s' ->  (yearInt g s) == (yearInt g s'))
+                   -- map (\s -> (s, yearOf g s)) xs
+
+
+cmpSubjYear::  R.RDF a => a -> R.Subject -> R.Subject -> Maybe Ordering
+cmpSubjYear g s s' = pure compare <*> (yearInt g s) <*> (yearInt g s') 
+
+{- Comparision function for Year Attributes -}
+compareSubjectYear:: R.RDF a => a -> R.Subject -> R.Subject -> Ordering
+compareSubjectYear g s s' = case cmpSubjYear g s s' of
+  (Nothing) -> EQ
+  (Just x ) -> x
+  
+yearInt:: R.RDF a => a -> R.Subject -> Maybe Integer
+yearInt g s = pure (read.(R.view)) <*> (yearOf g s) 

@@ -164,7 +164,7 @@ mainUi = undefined -- parseLocal "/home/lars/etc/contacts.turtle" >>= (\g -> run
 
 
 main:: IO ()
-main = --runO $
+main = runO $
        do
          args <- observe "Arguments" getArgs 
          let (opts, nonOpts) = case getOpt Permute mainoptions args of

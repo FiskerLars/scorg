@@ -20,11 +20,7 @@ import Debug.Hood.Observe
 import RdfBibliography
 import AcademicTerm
 
-
-
-
-
-
+import LatexConfig
 
 type Latex = String
 
@@ -94,16 +90,17 @@ publicationYear g xs@(s:ss) = foldr (\(l,r) x -> l ++ r ++ x) mempty
   where
     yearEntry = genericLefthandEntry $ maybe "" (R.view) (yearOf g s)
 
-groupByYear:: R.RDF a => a -> [R.Subject] -> [[R.Subject]]
-groupByYear g  = groupBy (\s s' ->  (yearOf g s) == (yearOf g s'))
-                   -- map (\s -> (s, yearOf g s)) xs
+
 
 
 {-| Only the first entry of every year displays the year in the left column. This is the function to call
 TODO: sortByYear
 -}
 genericPublicationList:: R.RDF a => a ->  [R.Subject] -> Latex
-genericPublicationList g xs = foldr (\ys l -> publicationYear g ys ++ l) mempty $ groupByYear g xs
+genericPublicationList g xs = foldr (\ys l -> publicationYear g ys ++ l) mempty
+                              $ groupByYear g
+                              $ reverse
+                              $ sortBy (compareSubjectYear g) xs
 
 
 {-| Example List of Publications.
@@ -111,7 +108,24 @@ TODO: fill up with my publications.
 TODO: read from generic config/RDF (better use RDF-graph to determine them)
 -}
 myPublications::[R.Subject]
-myPublications = map publicationNode ["fischer06:_secur_revoc_anony_authen_inter"]
+myPublications = map publicationNode [ "fischer06:_secur_revoc_anony_authen_inter"
+                                     , "Doetzer2005a"
+                                     , "Fischer2010"
+                                     , "Fischer2008"
+                                     , "fischer08:measuringunlinkabilityrevisited"
+                                     , "Stumpf2007"
+                                     , "Fischer14PaymentSystemsDistributed"
+                                     , "Fischer14ProbabilisticPointProcesses"
+                                     , "Fisch2012MeasuringUnlinkabilityPrivacy"
+                                     , "Fischer03ProtectingIntegrityand"
+                                     , "FD14DesignandImplementation"
+                                     , "FischDK2011LinkGlobally-"
+                                     , "FHB+12EnhancingPrivacyin"
+                                     , "Fischer2011"
+                                     , "FHH13IndoorPositioningby"
+                                     , "HFB+2Contextawaretrust"
+                                     , "Karatas2014"
+                                     , "WesteFPK201150BucksAttack"]
 
 
 
@@ -199,8 +213,8 @@ sortTeachingEntries:: R.RDF a => a -> [R.Subject] -> [R.Subject]
 sortTeachingEntries g = sortBy lectureOrdering
                         where
                           lectureOrdering s s' = compare
-                                                 (academicTermOf g s >>= return.readATobj)
-                                                 (academicTermOf g s' >>= return.readATobj) -- FIXME: order by termTODO: order Course,Lecture,.. (quality rang)
+                                                 (academicTermOf g s'  >>= return.readATobj)
+                                                 (academicTermOf g s >>= return.readATobj) -- FIXME: order by termTODO: order Course,Lecture,.. (quality rang)
                             where
                               readATobj:: R.Node -> AcademicTerm
                               readATobj = read.tail.(R.view)
@@ -209,43 +223,9 @@ sortTeachingEntries g = sortBy lectureOrdering
 
 genericTeachingList:: R.RDF a => a -> [R.Subject] -> Latex
 genericTeachingList g = intercalate("\n")
-                        .(map $ (teachLatexYear g)
-                        .(sortTeachingEntries g))
+                        .(map $ (teachLatexYear g))
                         .(groupByAcademicTerm g)
-
-
-defaultCourses = map ((R.unode).(T.pack)) [ "#ws14winfo"
-                                          , "#ws14lbas"
-                                          , "#ws13post"
-                                          , "#ss14mobsec"
-                                          , "#ss14kuvs"
-                                          , "#ws13post"
-                                          , "#ws13itsec"
-                                          , "#ws13mobsec"
-                                          , "#ws13semsec"
-                                          , "#ss13semitsec"
-                                          , "#ss13osn"
-                                          , "#ss13kuvs"
-                                          , "#ss12osn"
-                                          , "#ss12pit"
-                                          , "#ws11itsec"
-                                          , "#ws11locpriv"
-                                          , "#ss08secvehic"
-                                          , "#ss08da-op3n"
-                                          , "#ws07car2car"
-                                          , "#ss07hapra"
-                                          , "#ss07usfctf"
-                                          , "#ws06topoaddr"
-                                          , "#ws06ictf"
-                                          , "#ss06hapra"
-                                          , "#ws05gdi3"
-                                          , "#ws05ictf"
-                                          , "#ss05its2"
-                                          , "#ss05da-op3n"
-                                          , "#ws04its1"
-                                          , "#ws04ictf"
-                                          , "#ss04adhoc"
-                                          , "#ws03os" ]
+                        .(sortTeachingEntries g)  
 
 
 
@@ -253,14 +233,7 @@ defaultCourses = map ((R.unode).(T.pack)) [ "#ws14winfo"
 {-| generate a CV of a given person
 -}
 genCvLatex:: R.RDF a => a -> R.Subject -> IO Latex
-genCvLatex g s = (sequence $ [ latexHeader
-                             , contactInfo
-                             , experience
-                             , pubList
-                             , education
-                             , talks
-                             , teaching
-                             , latexFooter])
+genCvLatex g s = (sequence $ cvstructure )
                  >>= return.(foldl (++) "")
 {-                 ++ experience
                  ++ (genericPublicationList g $ observe "myPubs" myPublications)
@@ -270,24 +243,30 @@ genCvLatex g s = (sequence $ [ latexHeader
                  ++ latexFooter
 -}
   where
-    latexHeader = readFile "/tmp/header.tex"
-{-
-      return "\\documentclass[utf8, a4paper, 12pt, english, oneside]{ecv-plus}\
-\\\usepackage{xltxtra}\
-\\\usepackage{ecv-plusNLS}\
-\\\ecvName{Lars Fischer}\
-\\\begin{document}\
-\\\ecvPortrait{./portrait02-bw.jpg}\
-\\\begin{ecv}" -- TODO name and image from graph
--}
-    latexFooter = readFile "/tmp/footer.tex"
-    contactInfo = return ""
-    experience  = return $ experienceTitle ++ ""
-    pubList     = return $ (++) pubListTitle $ genericPublicationList g $ observe "myPubs" myPublications
-    teaching    = return $ (++) teachingTitle $ genericTeachingList g defaultCourses
-    education   = return ""
-    talks       = return ""
+    latexHeader = readFile $ basedir ++ "header.tex"
+    latexFooter = readFile $ basedir ++ "footer.tex"
+    contactInfo = readFile $ basedir ++ "contactInfo.tex"
+    experience  = (readFile (basedir ++ "experience.tex") ) 
+                  >>= return.((++) experienceTitle) 
+    pubList     = return $ (++) pubListTitle
+                  $ genericPublicationList g
+                  $ observe "myPubs" myPublications
+    teaching    = return $ (++) teachingTitle $ genericTeachingList g $ myCourses g
+    education   = readFile $ basedir ++  "education.tex"
+    talks       = readFile $ basedir ++ "talks.tex"
+    cvstructure = [ latexHeader
+                  , contactInfo
+                  , experience
+                  , pubList
+                  , education
+                  , talks
+                  , teaching
+                  , latexFooter]
+
 
 teachingTitle = "\\ecvSection{Teaching \\ecvExperience}"
 experienceTitle = "\\ecvBreakSection{\\ecvExperience}"
 pubListTitle = "\\ecvSection{\\ecvPublications{}}"
+pagebreak = "\\ecvPageBreak\n"
+
+basedir="/home/lars/privat/personalia/templates/"
