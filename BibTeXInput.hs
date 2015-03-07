@@ -26,6 +26,7 @@ import Control.Monad
 import System.IO
 
 import RdfBibliography
+import RdfHandler
 
 
 {-

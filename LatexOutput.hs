@@ -3,11 +3,11 @@
 module LatexOutput (Latex,
                     genericPublicationList
                    , genericTeachingList
-                   , defaultCourses
                    , genCvLatex)
        where
 
 import Data.List
+--import Data.String.Utils
 import Data.Maybe
 import Data.Monoid
 import qualified Data.Text as T
@@ -18,9 +18,14 @@ import Debug.Hood.Observe
 
 
 import RdfBibliography
+import RdfHandler
 import AcademicTerm
 
 import LatexConfig
+import RdfCv
+import LanguageSelector
+
+import Strings
 
 type Latex = String
 
@@ -107,52 +112,36 @@ genericPublicationList g xs = foldr (\ys l -> publicationYear g ys ++ l) mempty
 TODO: fill up with my publications.
 TODO: read from generic config/RDF (better use RDF-graph to determine them)
 -}
-myPublications::[R.Subject]
-myPublications = map publicationNode [ "fischer06:_secur_revoc_anony_authen_inter"
-                                     , "Doetzer2005a"
-                                     , "Fischer2010"
-                                     , "Fischer2008"
-                                     , "fischer08:measuringunlinkabilityrevisited"
-                                     , "Stumpf2007"
-                                     , "Fischer14PaymentSystemsDistributed"
-                                     , "Fischer14ProbabilisticPointProcesses"
-                                     , "Fisch2012MeasuringUnlinkabilityPrivacy"
-                                     , "Fischer03ProtectingIntegrityand"
-                                     , "FD14DesignandImplementation"
-                                     , "FischDK2011LinkGlobally-"
-                                     , "FHB+12EnhancingPrivacyin"
-                                     , "Fischer2011"
-                                     , "FHH13IndoorPositioningby"
-                                     , "HFB+2Contextawaretrust"
-                                     , "Karatas2014"
-                                     , "WesteFPK201150BucksAttack"]
-
+myPublications :: R.RDF a => a -> R.Subject -> [R.Subject]
+myPublications g s = map ((checknode g).publicationNode)
+                     [ "fischer06:_secur_revoc_anony_authen_inter"
+                     , "Doetzer2005a"
+                     -- , "Fischer2010"
+                     , "Fischer2008"
+                     , "fischer08:measuringunlinkabilityrevisited"
+                     , "Stumpf2007"
+                     , "Fischer14PaymentSystemsDistributed"
+                     , "Fischer14ProbabilisticPointProcesses"
+                     , "Fisch2012MeasuringUnlinkabilityPrivacy"
+                     , "Fischer03ProtectingIntegrityand"
+                     , "FD14DesignandImplementation"
+                     , "FischDK2011LinkGlobally-"
+                     , "FHB+12EnhancingPrivacyin"
+                     , "Fischer2011"
+                     , "FHH13IndoorPositioningby"
+                     , "HFB+2Contextawaretrust"
+                     , "Karatas2014"
+                     , "WesteFPK201150BucksAttack"]
+  where
+    checknode g n = case R.rdfContainsNode g n of
+      True -> n
+      False -> error $ "node " ++ (R.view n) ++ " does not exist in graph"
 
 
 
 {-| The following functions provide LaTeχ output of teaching experience based on my very crdue first try on using RDF modelling for this.
 
 You find a set of predicates that indicate which contents may be included.
-
-\ecvSection{Teaching \ecvExperience}
-
-\ecvBreakSubSection{Thesis Tutor}
-\ecvTagPlainValueRagged{SS 2012}{Rania Said: Online Profile Manager\\ (Bachelor Thesis, German University in Cairo)}
-\ecvTagPlainValueRagged{WS 2011}{Nils Hahn: Sensor Fusion for Indoor Localisation}
-
-
-\ecvSubSection{Teaching Assistant}
-\ecvTagPlainValueRagged{WS 2011}{Lab Course: Einf\"{u}hrung in die IT-Sicherheit\\
-  Seminar: Geometric Routing
-}
-\ecvTagPlainValueRagged{WS 2005}{Lab Course: Grundlagen der Informatik 3\\[0mm]
-  [Fundamentals of Computer Science 3]}
-
-
-\ecvBreakSubSection{Autonomous Teaching}
-\ecvTagPlainValueRagged{WS 2013}{Lecture: Einführung in die IT-Sicherheit\\
-Lecture: Security in Mobile Communication\\
-
 
 
 TODO: multi-language for academic terms
@@ -230,43 +219,116 @@ genericTeachingList g = intercalate("\n")
 
 
 
-{-| generate a CV of a given person
+{- Generate LaTeX Contact Infos -}
+contactInfo:: R.RDF a => a -> Latex
+contactInfo g = "\\ecvTagPlainValueRagged{}{\\ecvBold{" ++ foafName ++" }\\\\\n"
+                ++ foafTitle  -- TODO replace . with .\, -- TODO empty title should avoid newline
+                ++ "Dipl.-Inf.}\n"
+                ++ "\\ecvNewLine\n"
+                ++ "\\ecvTagPlainValueRagged{\\ecvContact}\n"
+                ++ "{" ++ vcardStreetAddr mvCardNode ++ "\\\\\n" 
+                ++ vcPostalCode mvCardNode ++ " " ++ vcLocality mvCardNode ++ "\\\\[1mm]\n" 
+                ++ "\\ecvMobile: " ++ vcCellphone mvCardNode ++ "\\\\\n" -- TODO prettyprint number
+                ++ "\\ecvEmail: \\ecvHyperEMail{"++ foafMbox ++ "}\\\\\n"
+                ++ "\\ecvHyperLink{"++ foafHomepage ++"}"
+                ++ "}\n"
+
+                 where
+                   mvCardNode = listToMaybe $ vcardHasAddressPred g meNode
+                   vcardStreetAddr vc = mHeadObjView g "Addr missing" vc (Just vcStreetAddressNode)
+                   vcPostalCode vc    = mHeadObjView g "postal code missing" vc (Just vcPostalCodeNode)
+                   vcLocality vc      = mHeadObjView g "locality missing" vc (Just vcLocatityNode)
+                   vcCellphone  vc   = fromMaybe "Cellphone missing"
+                                       $ (\l -> listToMaybe l >>= (listToMaybe.(vcHasValue g)) >>= return.(R.view))
+--                                       $ filter  (isVcCellType g)
+                                       $ mvcPhoneNodes
+                   vcHasValue g sub = queryObjects g sub vcHasValueNode
+                   mvcPhoneNodes  = mQueryObjects g (Just meNode) (Just vcHasTelephoneNode)
+                   isVcCellType:: R.RDF a => a -> R.Subject -> Bool
+                   isVcCellType g phone = not.null $ R.query g (Just phone) (Just typePred) (Just vcCellTypeNode)
+                   
+                   foafTitle = headObjViewMod g "" (\s -> s++"\\\\\n") meNode foafTitleNode 
+                   foafName = headObjView g "Name of Subject Missing" meNode foafNameNode
+                   foafMbox = headObjView g "Mailaddr missing" meNode foafMboxNode
+                   foafHomepage = headObjView g "Homepage missing" meNode foafHomepageNode
+
+                   meNode = R.bnode $ T.pack "_:me" -- TODO make nice
+                   foafTitleNode = mkUnode' foaf "title"
+                   foafNameNode =  mkUnode' foaf "name"
+                   foafMboxNode = mkUnode' foaf "mbox"
+                   foafHomepageNode = mkUnode' foaf "homepage"
+                   
+                   vcardHasAddressPred = objectsByPred (mkUnode' vcard "hasAddress")
+                   vcStreetAddressNode = mkUnode' vcard "street-address"
+                   vcPostalCodeNode = mkUnode' vcard "postal-code"
+                   vcLocatityNode = mkUnode' vcard "locality"
+                   vcCellTypeNode = mkUnode' vcard "Cell"
+                   vcHasTelephoneNode = mkUnode' vcard "hasTelephone"
+                   vcHasValueNode = mkUnode' vcard "hasValue"
+
+                   
+{-| generate a CV of a given person (english default)
 -}
-genCvLatex:: R.RDF a => a -> R.Subject -> IO Latex
-genCvLatex g s = (sequence $ cvstructure )
-                 >>= return.(foldl (++) "")
-{-                 ++ experience
-                 ++ (genericPublicationList g $ observe "myPubs" myPublications)
-                 ++ education
-                 ++ talks
-                 ++ (genericTeachingList g defaultCourses)
-                 ++ latexFooter
--}
+genCvLatex:: R.RDF a => a -> R.Subject -> LatexConfig ->  IO Latex
+genCvLatex g s c = (sequence $ cvstructure )
+                 >>= return.(foldr ((++)) "")
   where
-    latexHeader = readFile $ basedir ++ "header.tex"
-    latexFooter = readFile $ basedir ++ "footer.tex"
-    contactInfo = readFile $ basedir ++ "contactInfo.tex"
-    experience  = (readFile (basedir ++ "experience.tex") ) 
-                  >>= return.((++) experienceTitle) 
+    latexHeader = readFile $ basedir ++ "header.tex" 
+    latexFooter = readFile $ basedir ++ case lang c of
+      DE -> "footer.de.tex"
+      otherwise -> "footer.tex"
+    -- contactInfo = readFile $ basedir ++ "contactInfo.tex"
+                  
+    experience  = (readFile (basedir ++ "experience.tex")) 
+                  >>= return.((++) (experienceTitle (lang c))) 
     pubList     = return $ (++) pubListTitle
                   $ genericPublicationList g
-                  $ observe "myPubs" myPublications
-    teaching    = return $ (++) teachingTitle $ genericTeachingList g $ myCourses g
+                  $ myPublications g s
+    teaching    = return $ (++) (teachingTitle (lang c))
+                  $ genericTeachingList g
+                  $ allCourses g
     education   = readFile $ basedir ++  "education.tex"
     talks       = readFile $ basedir ++ "talks.tex"
-    cvstructure = [ latexHeader
-                  , contactInfo
-                  , experience
-                  , pubList
+    voluntaryWork = (readFile $ basedir ++ "volunteer.tex")
+                    >>= return.((++) (volunteerTitle (lang c)))
+-- ToDo:    abilities, projects 
+    cvstructure = [ return $ documentclass c
+                  , latexHeader 
+                  , return $ contactInfo g
+                  , experience 
+                  , pubList 
                   , education
                   , talks
+                  , voluntaryWork
                   , teaching
                   , latexFooter]
 
 
-teachingTitle = "\\ecvSection{Teaching \\ecvExperience}"
-experienceTitle = "\\ecvBreakSection{\\ecvExperience}"
+
+teachingTitle DE = "\\ecvSection{Lehrerfahrung}"
+teachingTitle EN = "\\ecvSection{Teaching \\ecvExperience}"
+teachingTitle _  = "\\ecvSection{Teaching}"
+
+experienceTitle _ = "\\ecvBreakSection{\\ecvExperience}"
 pubListTitle = "\\ecvSection{\\ecvPublications{}}"
+volunteerTitle _ = sectionStr "\\ecvVolunteer{}"
+
 pagebreak = "\\ecvPageBreak\n"
+
+sectionStr title = "\\ecvSection{" ++ title ++ "}\n"
+
+
+documentclass:: LatexConfig -> Latex
+documentclass c = concat ["\\documentclass[",
+                          intercalate ", " ["utf8", "a4paper", "12pt", "oneside"
+                                           ,  case lang c of
+                                             DE -> "german"
+                                             otherwise -> "english"
+                                             ]
+                          , "]{ecv-plus}"]
+
+
+
+
 
 basedir="/home/lars/privat/personalia/templates/"

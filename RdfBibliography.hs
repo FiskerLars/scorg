@@ -19,11 +19,9 @@ import qualified Data.RDF.Namespace as N
 
 import Debug.Hood.Observe
 
-instance Observable R.Node where
-  observer = observeBase
+import RdfHandler
 
-instance Observable R.Triple where
-  observer = observeBase
+
 
 bibliographyMappings = N.mergePrefixMappings N.standard_ns_mappings $ N.ns_mappings [ bibo ]
 
@@ -34,30 +32,11 @@ pubGraph triples = R.mkRdf triples Nothing bibliographyMappings
 
 bibo:: N.Namespace
 bibo  = N.mkPrefixedNS' "bibo" "http://purl.org/ontology/bibo/#"
-teach = N.mkPrefixedNS' "teach" "http://linkedscience.org/teach/ns#"
-event = N.mkPrefixedNS' "event" "http://purl.org/NET/c4dm/event.owl#"
-rdf = N.rdf
-dct = N.dct
-
-
-
-mkUnode':: N.Namespace -> String -> R.Node
-mkUnode' ns = (R.unode).(N.mkUri ns).(T.pack)
-
-strRnode:: String -> R.Node
-strRnode = (R.unode).(T.pack) 
 
 publicationNode id = (R.bnode $ T.pack $ ":" ++ id)
 
 
-literalTriple:: R.Subject -> R.Predicate -> T.Text -> R.Triple
-literalTriple s p t = R.triple s p (R.lnode $ R.plainL t)
 
-
-type TripleGenFkt = R.Subject -> T.Text -> R.Triple
-
--- ToDo create a new foaf:Person if not existing in the graph
-typePred = mkUnode' rdf "type"
 
 authorPred = mkUnode' dct "creator"
 editorPred = mkUnode' bibo "editor"
@@ -123,19 +102,10 @@ abbreviationPred = R.unode $ T.pack ":abbreviation"
 
 
 ------------- RDF Handling --------------------------
--- Todo: move to generic RDF-Lib
-queryObjects:: R.RDF a => a -> R.Subject -> R.Predicate -> [R.Object]
-queryObjects g s p = map R.objectOf
-                     $ observe ("queryObj " ++ (R.view s) ++ " " ++ (R.view p))
-                     $ R.query g (Just s) (Just p) Nothing
-objectsByPred:: R.RDF a => R.Predicate -> a -> R.Subject -> [R.Object]
-objectsByPred = flip (flip . queryObjects)
 
-
-listhead = Data.List.head
 
 typesOf = objectsByPred typePred
-typeOf  = (listToMaybe.).typesOf -- listhead.(typesOf g) 
+typeOf  = (listToMaybe.).typesOf 
 authorsOf = objectsByPred authorPred
 editorsOf = objectsByPred editorPred
 titlesOf  = objectsByPred titlePred
@@ -156,24 +126,6 @@ academicTermsOf:: R.RDF a => a -> R.Subject -> [R.Object]
 academicTermsOf = objectsByPred academicTermPred  
 academicTermOf:: R.RDF a => a -> R.Subject -> Maybe (R.Object)
 academicTermOf  = (listToMaybe.).academicTermsOf 
-
-
--- ToDo create instances R.View R.Node String
-lvalue (R.LNode (R.PlainL v)) = v
-
-
-instance R.View R.Node String where
-  view (R.UNode t) = T.unpack t
-  view (R.BNode t) = T.unpack t
-  view (R.LNode (R.PlainL t)) = T.unpack t
-  view (R.LNode (R.PlainLL t l)) = T.unpack t -- FIXME, how to handle language
-  view (R.LNode (R.TypedL t u)) = T.unpack t -- FIXME how to handle encoding url
-  
-instance R.View R.Node T.Text where
-  view (R.UNode t) = t
-  view (R.BNode t) = t
-  view (R.LNode (R.PlainL t)) = t
-  view _ = undefined
 
 
 

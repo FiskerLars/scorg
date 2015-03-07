@@ -30,6 +30,9 @@ import Debug.Hood.Observe
 -- import TextUi
 import BibTeXInput
 import LatexOutput
+import LatexConfig
+import LanguageSelector
+import RdfCv
 
 import System.Console.GetOpt
 
@@ -84,15 +87,20 @@ emailStringList gr = map (\s -> (show $ objectOf $ head $ query gr (Just s) (Jus
 printGraph::Worker
 printGraph g _ = putStrLn $ show g
 
+
+rdfCv:: Worker
+rdfCv g _ = putStrLn $ show $ cvParts g (R.bnode $ T.pack "_:me") 
+
 latexcv:: Worker
-latexcv g _ = ((flip genCvLatex)(R.unode $ T.pack "#me")) g
+latexcv g o = ((flip.flip genCvLatex) (R.unode $ T.pack "#me") (genLatexConfig o)) g
               >>= putStrLn 
 
 
 latexlectures:: Worker
-latexlectures g _ = putStrLn $ ((flip genericTeachingList) defaultCourses) g
+latexlectures g _ = putStrLn $ ((flip genericTeachingList) (allCourses g) ) g
                     
-
+genLatexConfig:: Options -> LatexConfig
+genLatexConfig o = LatexConfig {lang = language o}
 
 type Graph = R.TriplesGraph
 type Worker = Graph-> Options -> IO () 
@@ -108,6 +116,8 @@ commands = [ Command "cvlatex" latexcv
              "Output the known graph"
            , Command "www" undefined
              "Create My Homepage"
+           , Command "rdfcv" rdfCv
+             "Test-Output the Cv Rdv (for debugging)"
            , Command "" (\_ _ -> mainUi)
              "Default: run the main ui"
            ]
@@ -133,15 +143,19 @@ type ArgStr = [String]
 
 
 data Options = Options
-     { inputGraphs :: [String],
-       inputBibTex :: [String]} deriving Show
+     { inputGraphs :: [String]
+     , inputBibTex :: [String]
+     , language:: Language
+     , outputType:: String } deriving Show
 
 instance Observable Options where
   observer = observeBase
 
 defaultOptions = Options
-     { inputGraphs = [],
-       inputBibTex = []
+     { inputGraphs = []
+     , inputBibTex = []
+     , language = EN
+     , outputType = "rdf"
      }
 
 
@@ -152,6 +166,11 @@ mainoptions =
   , Option [] ["ig"] (ReqArg (\s o -> o { inputGraphs = inputGraphs o ++ [s] })
                       "input include" )
     "Insert a RDF (turtle) File"
+  , Option ['l'] ["lang"] (ReqArg (\s o -> o { language = read s })
+                           "language")
+    "Choose a language, default is en"
+  , Option ['o'] ["output"] (ReqArg (\s o -> o { outputType = s }) "output type")
+    "Select an output type."
   ]
 
 
@@ -164,7 +183,7 @@ mainUi = undefined -- parseLocal "/home/lars/etc/contacts.turtle" >>= (\g -> run
 
 
 main:: IO ()
-main = runO $
+main = -- runO $
        do
          args <- observe "Arguments" getArgs 
          let (opts, nonOpts) = case getOpt Permute mainoptions args of
