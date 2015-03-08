@@ -24,6 +24,7 @@ import AcademicTerm
 import LatexConfig
 import RdfCv
 import LanguageSelector
+import Foaf
 
 import Strings
 
@@ -221,16 +222,16 @@ genericTeachingList g = intercalate("\n")
 
 {- Generate LaTeX Contact Infos -}
 contactInfo:: R.RDF a => a -> Latex
-contactInfo g = "\\ecvTagPlainValueRagged{}{\\ecvBold{" ++ foafName ++" }\\\\\n"
-                ++ foafTitle  -- TODO replace . with .\, -- TODO empty title should avoid newline
+contactInfo g = "\\ecvTagPlainValueRagged{}{\\ecvBold{" ++ foafNameView g ++" }\\\\\n"
+                ++ replaceString (foafTitleView g) "." ".\\,"
                 ++ "Dipl.-Inf.}\n"
                 ++ "\\ecvNewLine\n"
                 ++ "\\ecvTagPlainValueRagged{\\ecvContact}\n"
                 ++ "{" ++ vcardStreetAddr mvCardNode ++ "\\\\\n" 
                 ++ vcPostalCode mvCardNode ++ " " ++ vcLocality mvCardNode ++ "\\\\[1mm]\n" 
                 ++ "\\ecvMobile: " ++ vcCellphone mvCardNode ++ "\\\\\n" -- TODO prettyprint number
-                ++ "\\ecvEmail: \\ecvHyperEMail{"++ foafMbox ++ "}\\\\\n"
-                ++ "\\ecvHyperLink{"++ foafHomepage ++"}"
+                ++ "\\ecvEmail: \\ecvHyperEMail{"++ foafMboxView g ++ "}\\\\\n"
+                ++ "\\ecvHyperLink{"++ foafHomepageView g ++"}"
                 ++ "}\n"
 
                  where
@@ -246,17 +247,6 @@ contactInfo g = "\\ecvTagPlainValueRagged{}{\\ecvBold{" ++ foafName ++" }\\\\\n"
                    mvcPhoneNodes  = mQueryObjects g (Just meNode) (Just vcHasTelephoneNode)
                    isVcCellType:: R.RDF a => a -> R.Subject -> Bool
                    isVcCellType g phone = not.null $ R.query g (Just phone) (Just typePred) (Just vcCellTypeNode)
-                   
-                   foafTitle = headObjViewMod g "" (\s -> s++"\\\\\n") meNode foafTitleNode 
-                   foafName = headObjView g "Name of Subject Missing" meNode foafNameNode
-                   foafMbox = headObjView g "Mailaddr missing" meNode foafMboxNode
-                   foafHomepage = headObjView g "Homepage missing" meNode foafHomepageNode
-
-                   meNode = R.bnode $ T.pack "_:me" -- TODO make nice
-                   foafTitleNode = mkUnode' foaf "title"
-                   foafNameNode =  mkUnode' foaf "name"
-                   foafMboxNode = mkUnode' foaf "mbox"
-                   foafHomepageNode = mkUnode' foaf "homepage"
                    
                    vcardHasAddressPred = objectsByPred (mkUnode' vcard "hasAddress")
                    vcStreetAddressNode = mkUnode' vcard "street-address"
@@ -279,7 +269,7 @@ genCvLatex g s c = (sequence $ cvstructure )
       otherwise -> "footer.tex"
     -- contactInfo = readFile $ basedir ++ "contactInfo.tex"
                   
-    experience  = (readFile (basedir ++ "experience.tex")) 
+    experience  = (readFile (basedir ++ "experience.tex"))  -- TODO derive from RDF
                   >>= return.((++) (experienceTitle (lang c))) 
     pubList     = return $ (++) pubListTitle
                   $ genericPublicationList g
@@ -287,9 +277,9 @@ genCvLatex g s c = (sequence $ cvstructure )
     teaching    = return $ (++) (teachingTitle (lang c))
                   $ genericTeachingList g
                   $ allCourses g
-    education   = readFile $ basedir ++  "education.tex"
-    talks       = readFile $ basedir ++ "talks.tex"
-    voluntaryWork = (readFile $ basedir ++ "volunteer.tex")
+    education   = readFile $ basedir ++  "education.tex"  -- TODO derive from RDF
+    talks       = readFile $ basedir ++ "talks.tex"   -- TODO derive from RDF
+    voluntaryWork = (readFile $ basedir ++ "volunteer.tex") -- TODO derive from RDF
                     >>= return.((++) (volunteerTitle (lang c)))
 -- ToDo:    abilities, projects 
     cvstructure = [ return $ documentclass c
