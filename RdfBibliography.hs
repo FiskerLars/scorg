@@ -12,6 +12,7 @@ module RdfBibliography where
 import Data.List
 import Data.Maybe
 import Control.Applicative
+
 import qualified Data.Map as M
 import qualified Data.Text as T
 import qualified Data.RDF as R
@@ -22,6 +23,8 @@ import Debug.Hood.Observe
 import RdfHandler
 
 
+
+bibliographyMappings = N.mergePrefixMappings N.standard_ns_mappings $ N.ns_mappings [ bibo ]
 
 bibliographyMappings = N.mergePrefixMappings N.standard_ns_mappings $ N.ns_mappings [ bibo ]
 
@@ -103,9 +106,17 @@ abbreviationPred = R.unode $ T.pack ":abbreviation"
 
 ------------- RDF Handling --------------------------
 
+<<<<<<< HEAD
 
 typesOf = objectsByPred typePred
 typeOf  = (listToMaybe.).typesOf 
+=======
+
+listhead = Data.List.head
+
+typesOf = objectsByPred typePred
+typeOf  = (listToMaybe.).typesOf -- listhead.(typesOf g) 
+>>>>>>> a777ac92c3c731b331d6cd061d9dce019ed9e3f6
 authorsOf = objectsByPred authorPred
 editorsOf = objectsByPred editorPred
 titlesOf  = objectsByPred titlePred
@@ -124,10 +135,14 @@ timestampOf   = (listToMaybe.).timestampsOf
 -- teaching experiences
 academicTermsOf:: R.RDF a => a -> R.Subject -> [R.Object]
 academicTermsOf = objectsByPred academicTermPred  
+<<<<<<< HEAD
 academicTermOf:: R.RDF a => a -> R.Subject -> Maybe (R.Object)
 academicTermOf  = (listToMaybe.).academicTermsOf 
 
 
+=======
+academicTermOf  = (listToMaybe.).academicTermsOf 
+>>>>>>> a777ac92c3c731b331d6cd061d9dce019ed9e3f6
 
 {- Group subjects by year-attribute -}
 groupByYear:: R.RDF a => a -> [R.Subject] -> [[R.Subject]]
