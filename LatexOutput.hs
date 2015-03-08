@@ -24,7 +24,9 @@ import AcademicTerm
 import LatexConfig
 import RdfCv
 import LanguageSelector
-import Foaf
+
+import Data.RDF.NS.Foaf
+import Data.RDF.NS.VCard
 
 import Strings
 
@@ -227,34 +229,15 @@ contactInfo g = "\\ecvTagPlainValueRagged{}{\\ecvBold{" ++ foafNameView g ++" }\
                 ++ "Dipl.-Inf.}\n"
                 ++ "\\ecvNewLine\n"
                 ++ "\\ecvTagPlainValueRagged{\\ecvContact}\n"
-                ++ "{" ++ vcardStreetAddr mvCardNode ++ "\\\\\n" 
-                ++ vcPostalCode mvCardNode ++ " " ++ vcLocality mvCardNode ++ "\\\\[1mm]\n" 
-                ++ "\\ecvMobile: " ++ vcCellphone mvCardNode ++ "\\\\\n" -- TODO prettyprint number
+                ++ "{" ++ vcardStreetAddrView g mvCardNode ++ "\\\\\n" 
+                ++ vcPostalCodeView g mvCardNode ++ " " ++ vcLocalityView g mvCardNode ++ "\\\\[1mm]\n" 
+                ++ "\\ecvMobile: " ++ vcCellphoneView g mvCardNode ++ "\\\\\n" -- TODO prettyprint number
                 ++ "\\ecvEmail: \\ecvHyperEMail{"++ foafMboxView g ++ "}\\\\\n"
                 ++ "\\ecvHyperLink{"++ foafHomepageView g ++"}"
                 ++ "}\n"
 
                  where
                    mvCardNode = listToMaybe $ vcardHasAddressPred g meNode
-                   vcardStreetAddr vc = mHeadObjView g "Addr missing" vc (Just vcStreetAddressNode)
-                   vcPostalCode vc    = mHeadObjView g "postal code missing" vc (Just vcPostalCodeNode)
-                   vcLocality vc      = mHeadObjView g "locality missing" vc (Just vcLocatityNode)
-                   vcCellphone  vc   = fromMaybe "Cellphone missing"
-                                       $ (\l -> listToMaybe l >>= (listToMaybe.(vcHasValue g)) >>= return.(R.view))
---                                       $ filter  (isVcCellType g)
-                                       $ mvcPhoneNodes
-                   vcHasValue g sub = queryObjects g sub vcHasValueNode
-                   mvcPhoneNodes  = mQueryObjects g (Just meNode) (Just vcHasTelephoneNode)
-                   isVcCellType:: R.RDF a => a -> R.Subject -> Bool
-                   isVcCellType g phone = not.null $ R.query g (Just phone) (Just typePred) (Just vcCellTypeNode)
-                   
-                   vcardHasAddressPred = objectsByPred (mkUnode' vcard "hasAddress")
-                   vcStreetAddressNode = mkUnode' vcard "street-address"
-                   vcPostalCodeNode = mkUnode' vcard "postal-code"
-                   vcLocatityNode = mkUnode' vcard "locality"
-                   vcCellTypeNode = mkUnode' vcard "Cell"
-                   vcHasTelephoneNode = mkUnode' vcard "hasTelephone"
-                   vcHasValueNode = mkUnode' vcard "hasValue"
 
                    
 {-| generate a CV of a given person (english default)

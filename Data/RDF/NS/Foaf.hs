@@ -1,4 +1,4 @@
-module Foaf where
+module Data.RDF.NS.Foaf where
 
 import RdfHandler
 
