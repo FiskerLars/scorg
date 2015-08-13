@@ -1,29 +1,42 @@
-
+{-| Generate Latex Output from the graph. Currently implements my CV
+-}
 module LatexOutput (Latex,
                     genericPublicationList
                    , genericTeachingList
-                   , defaultCourses
                    , genCvLatex)
        where
 
 import Data.List
+--import Data.String.Utils
 import Data.Maybe
 import Data.Monoid
 import qualified Data.Text as T
 import qualified Data.RDF as R
+import Data.RDF.Types
+import Debug.Trace
+
+import Data.DateTime
+
+-- import Debug.Hood.Observe
 
 
-import Debug.Hood.Observe
-
-
-import RdfBibliography
+import Data.RDF.Bibliography
+import RdfHandler
 import AcademicTerm
 
+import LatexConfig
 
 
+-- import RdfCv
+import LanguageSelector
+import Data.RDF.CV
 
+import Data.RDF.NS.Foaf
+import Data.RDF.NS.VCard
+import Data.RDF.NS.Teach
+import Data.RDF.NS.Bio
 
-
+import Strings
 
 type Latex = String
 
@@ -57,12 +70,14 @@ International Confernce on Future Generation Communication 2012, At London, UK
 proceedings o 2012 5th IFIP International Conference on New Technologies, Mobility and Security (NTMS)}\\
 
 -}
-genericRighthandEntry:: R.RDF a => a -> R.Subject -> Latex
-genericRighthandEntry g s = intercalate "\\\\\n" [authors,
-                                                  title,
-                                                  publicationdata]
+ecvPublicationRight:: R.RDF a => a -> R.Subject -> Latex
+ecvPublicationRight g s = '{': (intercalate "\\\\\n" [authors,
+                                                        title,
+                                                        publicationdata]
+                                 )
+                            ++ "}\n"
                    where
-                     authors = latexCommasAnd $ map (R.view) $ authorsOf g s
+                     authors = "\\ecvBold{"++ (latexCommasAnd $ map (R.view) $ authorsOf g s) ++ " }"
                      title =   case titlesOf g s of
                        [] -> ""
                        titles -> R.view $ head titles
@@ -78,65 +93,36 @@ genericRighthandEntry g s = intercalate "\\\\\n" [authors,
                      year = maybe Nothing (Just.(R.view)) (yearOf g s)
                      
 
-genericLefthandEntry:: String -> Latex
-genericLefthandEntry s = "\\ecvTagPlainValueRagged{" ++ s ++ "}"
+ecvGenericLeftSide:: String -> Latex
+ecvGenericLeftSide s = "\\ecvTagPlainValueRagged{" ++ s ++ "}"
 {-| Given an ordered list of publications (RDF subjects), generate entry list.
 -}
 publicationYear:: R.RDF a => a -> [R.Subject] -> Latex
 publicationYear _ [] = mempty
 publicationYear g xs@(s:ss) = foldr (\(l,r) x -> l ++ r ++ x) mempty
                               $ zip
-                              (yearEntry:(repeat $ genericLefthandEntry ""))
-                              (map (genericRighthandEntry g) xs)
+                              (yearEntry:(repeat $ ecvGenericLeftSide ""))
+                              (map (ecvPublicationRight g) xs)
   where
-    yearEntry = genericLefthandEntry $ maybe "" (R.view) (yearOf g s)
+    yearEntry = ecvGenericLeftSide $ maybe "" (R.view) (yearOf g s)
 
-groupByYear:: R.RDF a => a -> [R.Subject] -> [[R.Subject]]
-groupByYear g  = groupBy (\s s' ->  (yearOf g s) == (yearOf g s'))
-                   -- map (\s -> (s, yearOf g s)) xs
+
 
 
 {-| Only the first entry of every year displays the year in the left column. This is the function to call
 TODO: sortByYear
 -}
 genericPublicationList:: R.RDF a => a ->  [R.Subject] -> Latex
-genericPublicationList g xs = foldr (\ys l -> publicationYear g ys ++ l) mempty $ groupByYear g xs
-
-
-{-| Example List of Publications.
-TODO: fill up with my publications.
-TODO: read from generic config/RDF (better use RDF-graph to determine them)
--}
-myPublications::[R.Subject]
-myPublications = map publicationNode ["fischer06:_secur_revoc_anony_authen_inter",
-                                      ""]
-
+genericPublicationList g xs = foldr (\ys l -> publicationYear g ys ++ l) mempty
+                              $ groupByYear g
+                              $ reverse
+                              $ sortBy (compareSubjectYear g) xs
 
 
 
 {-| The following functions provide LaTeχ output of teaching experience based on my very crdue first try on using RDF modelling for this.
 
 You find a set of predicates that indicate which contents may be included.
-
-\ecvSection{Teaching \ecvExperience}
-
-\ecvBreakSubSection{Thesis Tutor}
-\ecvTagPlainValueRagged{SS 2012}{Rania Said: Online Profile Manager\\ (Bachelor Thesis, German University in Cairo)}
-\ecvTagPlainValueRagged{WS 2011}{Nils Hahn: Sensor Fusion for Indoor Localisation}
-
-
-\ecvSubSection{Teaching Assistant}
-\ecvTagPlainValueRagged{WS 2011}{Lab Course: Einf\"{u}hrung in die IT-Sicherheit\\
-  Seminar: Geometric Routing
-}
-\ecvTagPlainValueRagged{WS 2005}{Lab Course: Grundlagen der Informatik 3\\[0mm]
-  [Fundamentals of Computer Science 3]}
-
-
-\ecvBreakSubSection{Autonomous Teaching}
-\ecvTagPlainValueRagged{WS 2013}{Lecture: Einführung in die IT-Sicherheit\\
-Lecture: Security in Mobile Communication\\
-
 
 
 TODO: multi-language for academic terms
@@ -170,100 +156,231 @@ teachRightHandEntry g s = fromMaybe "" ((typeOf g s >>= eventTypeStr) >>= return
                               
 
 
+-----------------------------------------------------
+-- Teaching Lists
+
+
 
 teachLatexYear:: R.RDF a => a ->  [R.Subject] -> Latex
-teachLatexYear g xs =  observe "teachLatexYear"
-                       $ foldr (\(l,r) x -> l ++ r ++ x) mempty
+teachLatexYear g xs =  -- observe "teachLatexYear" $
+                        foldr (\(l,r) x -> l ++ r ++ x) mempty
                        $ zip
-                         ((genericLefthandEntry $ maybe "" (shortNameOf g) (academicTermOf g $ head xs))
-                          :(repeat $ genericLefthandEntry ""))
-                         $ map (\x -> "{" ++ (teachRightHandEntry g x) ++ "}") xs
+                         ((ecvGenericLeftSide $ maybe "" (shortNameOf g) (academicTermOf g $ head xs))
+                          :(repeat $ ecvGenericLeftSide ""))
+                         $ map (\x -> "{" ++ (teachRightHandEntry g x) ++ "}\n") xs
   where
     shortNameOf:: R.RDF a => a -> R.Subject -> String
     shortNameOf g s = maybe "" (R.view) (nameOf g s) -- TODO use abbrev
 
 
 
-groupByAcademicTerm:: R.RDF a => a -> [R.Subject] -> [[R.Subject]]
-groupByAcademicTerm g = groupBy (\s s' ->  (academicTermOf g s) == (academicTermOf g s'))
-
-
-{- TODO separate autonomous teaching from supervised teaching from thesis advisor
--}
-groupByTypeClasses:: R.RDF a => a -> [R.Subject] -> [[R.Subject]]
-groupByTypeClasses = undefined
-
-sortTeachingEntries:: R.RDF a => a -> [R.Subject] -> [R.Subject]
-sortTeachingEntries g = sortBy lectureOrdering
-                        where
-                          lectureOrdering s s' = compare
-                                                 (academicTermOf g s >>= return.readATobj)
-                                                 (academicTermOf g s' >>= return.readATobj) -- FIXME: order by termTODO: order Course,Lecture,.. (quality rang)
-                            where
-                              readATobj:: R.Node -> AcademicTerm
-                              readATobj = read.tail.(R.view)
-                              
-
 
 genericTeachingList:: R.RDF a => a -> [R.Subject] -> Latex
 genericTeachingList g = intercalate("\n")
-                        .(map $ (teachLatexYear g)
-                        .(sortTeachingEntries g))
+                        .(map $ (teachLatexYear g))
                         .(groupByAcademicTerm g)
-
-
-defaultCourses = map ((R.unode).(T.pack)) [ "#ws14winfo"
-                                          , "#ws14lbas"
-                                          , "#ws13post"
-                                          , "#ss14mobsec"
-                                          , "#ss14kuvs"
-                                          , "#ws13post"
-                                          , "#ws13itsec"
-                                          , "#ws13mobsec"
-                                          , "#ws13semsec"
-                                          , "#ss13semitsec"
-                                          , "#ss13osn"
-                                          , "#ss13kuvs"
-                                          , "#ss12osn"
-                                          , "#ss12pit"
-                                          , "#ws11itsec"
-                                          , "#ws11locpriv"
-                                          , "#ss08secvehic"
-                                          , "#ss08da-op3n"
-                                          , "#ws07car2car"
-                                          , "#ss07hapra"
-                                          , "#ss07usfctf"
-                                          , "#ws06topoaddr"
-                                          , "#ws06ictf"
-                                          , "#ss06hapra"
-                                          , "#ws05gdi3"
-                                          , "#ws05ictf"
-                                          , "#ss05its2"
-                                          , "#ss05da-op3n"
-                                          , "#ws04its1"
-                                          , "#ws04ictf"
-                                          , "#ss04adhoc"
-                                          , "#ws03os" ]
+                        .(sortTeachingEntries g)  
 
 
 
 
-{-| generate a CV of a given person
--}
-genCvLatex:: R.RDF a => a -> R.Subject -> Latex
-genCvLatex g s = latexHeader
-                 ++ contactInfo
-                 ++ experience
-                 ++ (genericPublicationList g $ observe "myPubs" myPublications)
-                 ++ education
-                 ++ talks
-                 ++ (genericTeachingList g defaultCourses)
-                 ++ latexFooter
 
+
+{- Generate LaTeX Contact Infos -}
+ecvContactData:: R.RDF a => LatexConfig -> a -> Latex
+ecvContactData c g = "\\ecvTagPlainValueRagged{}{\\ecvBold{" ++ foafNameView g ++" }\\\\\n"
+                     ++ replaceString (foafTitleView g) "." ".\\,"
+                     ++ "Dipl.-Inf.}\n"
+                     ++ "\\ecvNewLine\n"
+                     ++ "\\ecvTagPlainValueRagged{\\ecvContact}\n"
+                     ++ "{" ++ vcardStreetAddrView g mvAddrCard ++ "\\\\\n" 
+                     ++ vcPostalCodeView g mvAddrCard ++ " " ++ vcLocalityView g mvAddrCard ++ "\\\\[1mm]\n" 
+                     ++ "\\ecvMobile: " ++ replaceString (vcCellphoneView g (filterVcCells g mvPhoneCards)) "tel" "" ++ "\\\\\n" -- TODO prettyprint number
+                     ++ "\\ecvEmail: \\ecvHyperEMail{"++ foafMboxView g ++ "}\\\\\n"
+                     ++ "\\ecvHyperLink{"++ foafHomepageView g ++"}"
+                     ++ "}\n"
+                     
   where
-    latexHeader = ""
-    latexFooter = ""
-    contactInfo = ""
-    experience  = ""
-    education   = ""
-    talks       = ""
+    mvAddrCard = listToMaybe $ vcardHasAddressPred g meNode
+    mvPhoneCards = mvcPhoneNodes g meNode
+
+
+ecvTeachingTitle:: LatexConfig -> Latex
+ecvTeachingTitle c | lang c == read "de" = ecvSection "Lehrerfahrung"
+                   | lang c == read "en" = ecvSection "Teaching \\ecvExperience"
+                   | otherwise           = ecvSection "Teaching"
+
+
+ecvExperienceTitle _ = ecvSection "\\ecvExperience{}"
+ecvPubListTitle _    = ecvSection "\\ecvPublications{}"
+ecvVolunteerTitle _  = ecvSection "\\ecvVolunteer{}"
+
+ecvSection title = "\\ecvSection{" ++ title ++ "}\n"
+
+ecvNewPage:: Latex
+ecvNewPage = "\\ecvPageBreak\n"
+
+
+ecvSince:: LatexConfig -> Latex
+ecvSince conf | lang conf == read "de" = "seit"
+              | otherwise              = "since"
+
+
+ecvUntil::LatexConfig -> Latex
+ecvUntil conf | lang conf == read "de" = "bis"
+              | otherwise              = "until"
+
+
+
+ecvDate:: LatexConfig -> Maybe DateTime -> Latex
+ecvDate _ Nothing = ""
+ecvDate _ (Just dt) = formatDateTime "\\ecvDate{%d}{%m}{%y}" dt
+
+{-| \\ecvDate{}{04}{2011} -- \\ecvDate{}{03}{2013} |-}
+
+ecvEmploymentInterval:: LatexConfig -> BioInterval -> Latex
+ecvEmploymentInterval conf (BioInterval from to) = case map (ecvDate conf) [from,to] of
+                                                     ["", (a:as)]   -> intercalate " " [ecvUntil conf, a:as]
+                                                     [ (b:bs), ""]  -> intercalate " " [ecvSince conf, b:bs]
+                                                     [ "", ""] -> ""
+                                                     [ a, b]         -> intercalate " - " [a, b]
+                                                     
+
+
+
+{-| Display an employment entry.
+|-}
+ecvEmploymentEntry:: R.RDF a => LatexConfig -> a -> R.Subject  -> Latex
+ecvEmploymentEntry conf g e  = "\\ecvTagPlainValueRagged{"
+                              ++ (fromMaybe
+                                  "{\\bf no interval given}"
+                                  (getBioInterval g e
+                                   >>= (return.(ecvEmploymentInterval conf))))
+                              ++ "}{"
+                              -- ToDo: replace all newlines by \\
+                              --       format string
+                              ++ ecvMultilineFirstBold conf g e (mkUnode' rdf "label")
+                              ++ ecvMultilineString conf g e (mkUnode' rdf "place")
+                              ++ "}\n"
+
+
+ecvMultilineFirstBold:: R.RDF a => LatexConfig -> a -> R.Subject  -> R.Predicate -> Latex
+ecvMultilineFirstBold conf g e p = case filter isLNode $ queryObjects g e p of
+  [] -> ""
+  list -> intercalate "\\\\\n"
+          $ (\(l:ls) -> (:) ("\\ecvBold{" ++ l ++  "}") ls) 
+          $ lines
+          $ R.view
+          $ languageSelect (lang conf) list
+
+
+ecvMultilineString:: R.RDF a => LatexConfig -> a -> R.Subject  -> R.Predicate -> Latex
+ecvMultilineString conf g e p = case filter isLNode $ queryObjects g e p of
+  [] -> ""
+  list -> intercalate "\\\\\n" $ lines
+          $ R.view
+          $ languageSelect (lang conf) list
+
+
+
+    
+
+
+ecvFormatEmployments:: R.RDF a => LatexConfig -> a ->  [R.Subject]  -> Latex
+ecvFormatEmployments conf g = (intercalate "\n")
+                              .(map (ecvEmploymentEntry conf g))
+
+{-| generate a CV of a given person (english default)
+-}
+genCvLatex:: R.RDF a => a -> R.Subject -> LatexConfig ->  IO Latex
+genCvLatex g s c = (sequence $ cvstructure )
+                   >>= return.(foldr ((++)) "")
+  where
+    latexHeader = readFile $ basedir ++ "header.tex" 
+    latexFooter = readFile $ basedir ++ case lang c of
+      DE -> "footer.de.tex"
+      otherwise -> "footer.tex"
+    -- ecvContactData = readFile $ basedir ++ "contactInfo.tex"
+                  
+    experienceFile  = (readFile (basedir ++ "experience.tex"))  -- TODO derive from RDF
+                  >>= return.((++) (ecvExperienceTitle c)) 
+    experience  = return $ (++) (ecvExperienceTitle c)
+                  $ ecvFormatEmployments c g
+                  $ (\e -> trace ("sorted: " ++ show e) e)
+                  $ sortEmployments g
+                  $ allEmployments g meNode 
+    pubList     = return $ (++) (ecvPubListTitle c)
+                  $ genericPublicationList g
+                  $ myPublications g s
+    teaching    = return $ (++) (ecvTeachingTitle c)
+                  $ genericTeachingList g
+                  $ allCourses g
+    education   = readFile $ basedir ++  "education.tex"  -- TODO derive from RDF
+    talks       = readFile $ basedir ++ "talks.tex"   -- TODO derive from RDF
+    voluntaryWork = (readFile $ basedir ++ "volunteer.tex") -- TODO derive from RDF
+                    >>= return.((++) (ecvVolunteerTitle c))
+-- ToDo:    abilities, projects 
+    cvstructure = [ return $ documentclass c
+                  , latexHeader 
+                  , return $ ecvContactData c g
+--                  , experienceFile
+                  , experience
+                  , (return ecvNewPage)
+                  , pubList 
+                  , education
+                  , talks
+                  , voluntaryWork
+                  , teaching
+                  , latexFooter]
+
+
+
+{-| Example List of Publications.
+TODO: fill up with my publications.
+TODO: read from generic config/RDF (better use RDF-graph to determine them)
+-}
+myPublications :: R.RDF a => a -> R.Subject -> [R.Subject]
+myPublications g s = map ((checknode g).publicationNode)
+                     [ "fischer06:_secur_revoc_anony_authen_inter"
+                     , "Doetzer2005a"
+                     -- , "Fischer2010"
+                     , "Fischer2008"
+                     , "fischer08:measuringunlinkabilityrevisited"
+                     , "Stumpf2007"
+                     , "Fischer14PaymentSystemsDistributed"
+                     , "Fischer14ProbabilisticPointProcesses"
+                     , "Fisch2012MeasuringUnlinkabilityPrivacy"
+                     , "Fischer03ProtectingIntegrityand"
+                     , "FD14DesignandImplementation"
+                     , "FischDK2011LinkGlobally-"
+                     , "FHB+12EnhancingPrivacyin"
+                     , "Fischer2011"
+                     , "FHH13IndoorPositioningby"
+                     , "HFB+2Contextawaretrust"
+                     , "Karatas2014"
+                     , "WesteFPK201150BucksAttack"]
+  where
+    checknode g n = case R.rdfContainsNode g n of
+      True -> n
+      False -> error $ "node " ++ (R.view n) ++ " does not exist in graph"
+
+
+
+
+
+
+
+documentclass:: LatexConfig -> Latex
+documentclass c = concat ["\\documentclass[",
+                          intercalate ", " ["utf8", "a4paper", "12pt", "oneside"
+                                           ,  case lang c of
+                                             DE -> "german"
+                                             otherwise -> "english"
+                                             ]
+                          , "]{ecv-plus}"]
+
+
+
+
+
+basedir="/home/lars/privat/personalia/templates/"

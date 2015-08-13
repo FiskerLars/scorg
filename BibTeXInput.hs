@@ -25,7 +25,9 @@ import Control.Exception.Base
 import Control.Monad
 import System.IO
 
-import RdfBibliography
+import Data.RDF.Bibliography
+import RdfHandler
+
 
 {-
 https://code.google.com/p/bibotools/source/browse/bibo-ontology/tags/1.0/bibo.n3
@@ -82,8 +84,8 @@ bibTeXToRDF:: R.RDF a => [Entry.T] -> a
 bibTeXToRDF entries = pubGraph $ foldr (\e t ->  newPublication e ++ t) [] entries 
   where
     newPublication e = R.triple (publicationNode (Entry.identifier e))  
-                                 typePred
-    				 (strRnode "bibo:Article") 
+                       typePred
+                       (strRnode "bibo:Article") 
                        : (mapEntryOntoSubj (publicationNode (Entry.identifier e)) e)
     
  

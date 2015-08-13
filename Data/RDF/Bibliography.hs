@@ -5,7 +5,7 @@ essentially defines our local terminology.
 
 -}
 
-module RdfBibliography where
+module Data.RDF.Bibliography where
 
 
 
@@ -93,13 +93,10 @@ pages s t = case T.splitOn (T.pack "-") t of
 
 
 
---- teaching Experience
 
-academicTermPred = mkUnode' teach  "academicTerm"
-                   --R.unode $ T.pack "http://linkedscience.org/teach/ns#academicTerm"
+
+
 abbreviationPred = R.unode $ T.pack ":abbreviation"
-
-
 
 
 
@@ -125,12 +122,6 @@ booktitleOf = (listToMaybe.).booktitlesOf
 pdfurlOf    = objectsByPred pdfurlPred -- flip (queryObjects g) pdfurlPred
 timestampsOf  = objectsByPred timestampPred 
 timestampOf   = (listToMaybe.).timestampsOf
-
--- teaching experiences
-academicTermsOf:: R.RDF a => a -> R.Subject -> [R.Object]
-academicTermsOf = objectsByPred academicTermPred  
-academicTermOf:: R.RDF a => a -> R.Subject -> Maybe (R.Object)
-academicTermOf  = (listToMaybe.).academicTermsOf 
 
 
 
