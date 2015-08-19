@@ -21,7 +21,6 @@ defaultLatexConfig :: LatexConfig
 defaultLatexConfig = LatexConfig { lang = EN }
 
 
--- ToDo 
 allCourses:: R.RDF a => a -> [R.Subject]
 allCourses g = map R.subjectOf
               $ R.query g

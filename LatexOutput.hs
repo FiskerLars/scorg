@@ -26,8 +26,9 @@ import AcademicTerm
 
 import LatexConfig
 
+import Data.RDF.NS.Foaf
+import Data.RDF.NS.VCard
 
--- import RdfCv
 import LanguageSelector
 import Data.RDF.CV
 
@@ -117,7 +118,39 @@ genericPublicationList g xs = foldr (\ys l -> publicationYear g ys ++ l) mempty
                               $ groupByYear g
                               $ reverse
                               $ sortBy (compareSubjectYear g) xs
+{-=======
 
+
+{-| Example List of Publications.
+TODO: fill up with my publications.
+TODO: read from generic config/RDF (better use RDF-graph to determine them)
+-}
+myPublications :: R.RDF a => a -> R.Subject -> [R.Subject]
+myPublications g s = map ((checknode g).publicationNode)
+                     [ "fischer06:_secur_revoc_anony_authen_inter"
+                     , "Doetzer2005a"
+                     -- , "Fischer2010"
+                     , "Fischer2008"
+                     , "fischer08:measuringunlinkabilityrevisited"
+                     , "Stumpf2007"
+                     , "Fischer14PaymentSystemsDistributed"
+                     , "Fischer14ProbabilisticPointProcesses"
+                     , "Fisch2012MeasuringUnlinkabilityPrivacy"
+                     , "Fischer03ProtectingIntegrityand"
+                     , "FD14DesignandImplementation"
+                     , "FischDK2011LinkGlobally-"
+                     , "FHB+12EnhancingPrivacyin"
+                     , "Fischer2011"
+                     , "FHH13IndoorPositioningby"
+                     , "HFB+2Contextawaretrust"
+                     , "Karatas2014"
+                     , "WesteFPK201150BucksAttack"]
+  where
+    checknode g n = case R.rdfContainsNode g n of
+      True -> n
+      False -> error $ "node " ++ (R.view n) ++ " does not exist in graph"
+>>>>>>> 52e0241b7e40ddd318d7f01b6d8081768be36cf5
+-}
 
 
 {-| The following functions provide LaTeχ output of teaching experience based on my very crdue first try on using RDF modelling for this.
@@ -174,12 +207,40 @@ teachLatexYear g xs =  -- observe "teachLatexYear" $
 
 
 
+{- removed by Merge 
+=======
+
+groupByAcademicTerm:: R.RDF a => a -> [R.Subject] -> [[R.Subject]]
+groupByAcademicTerm g = groupBy (\s s' ->  (academicTermOf g s) == (academicTermOf g s'))
+
+
+{- TODO separate autonomous teaching from supervised teaching from thesis advisor
+-}
+groupByTypeClasses:: R.RDF a => a -> [R.Subject] -> [[R.Subject]]
+groupByTypeClasses = undefined
+
+sortTeachingEntries:: R.RDF a => a -> [R.Subject] -> [R.Subject]
+sortTeachingEntries g = sortBy lectureOrdering
+                        where
+                          lectureOrdering s s' = compare
+                                                 (academicTermOf g s'  >>= return.readATobj)
+                                                 (academicTermOf g s >>= return.readATobj) -- FIXME: order by termTODO: order Course,Lecture,.. (quality rang)
+                            where
+                              readATobj:: R.Node -> AcademicTerm
+                              readATobj = read.tail.(R.view)
+                              
+
+>>>>>>> 52e0241b7e40ddd318d7f01b6d8081768be36cf5
+-}
+
 
 genericTeachingList:: R.RDF a => a -> [R.Subject] -> Latex
 genericTeachingList g = intercalate("\n")
                         .(map $ (teachLatexYear g))
                         .(groupByAcademicTerm g)
                         .(sortTeachingEntries g)  
+
+
 
 
 
@@ -367,8 +428,81 @@ myPublications g s = map ((checknode g).publicationNode)
 
 
 
+{-
+=======
 
 
+
+
+{- Generate LaTeX Contact Infos -}
+contactInfo:: R.RDF a => a -> Latex
+contactInfo g = "\\ecvTagPlainValueRagged{}{\\ecvBold{" ++ foafNameView g ++" }\\\\\n"
+                ++ replaceString (foafTitleView g) "." ".\\,"
+                ++ "Dipl.-Inf.}\n"
+                ++ "\\ecvNewLine\n"
+                ++ "\\ecvTagPlainValueRagged{\\ecvContact}\n"
+                ++ "{" ++ vcardStreetAddrView g mvCardNode ++ "\\\\\n" 
+                ++ vcPostalCodeView g mvCardNode ++ " " ++ vcLocalityView g mvCardNode ++ "\\\\[1mm]\n" 
+                ++ "\\ecvMobile: " ++ vcCellphoneView g mvCardNode ++ "\\\\\n" -- TODO prettyprint number
+                ++ "\\ecvEmail: \\ecvHyperEMail{"++ foafMboxView g ++ "}\\\\\n"
+                ++ "\\ecvHyperLink{"++ foafHomepageView g ++"}"
+                ++ "}\n"
+
+                 where
+                   mvCardNode = listToMaybe $ vcardHasAddressPred g meNode
+
+                   
+{-| generate a CV of a given person (english default)
+-}
+genCvLatex:: R.RDF a => a -> R.Subject -> LatexConfig ->  IO Latex
+genCvLatex g s c = (sequence $ cvstructure )
+                 >>= return.(foldr ((++)) "")
+  where
+    latexHeader = readFile $ basedir ++ "header.tex" 
+    latexFooter = readFile $ basedir ++ case lang c of
+      DE -> "footer.de.tex"
+      otherwise -> "footer.tex"
+    -- contactInfo = readFile $ basedir ++ "contactInfo.tex"
+                  
+    experience  = (readFile (basedir ++ "experience.tex"))  -- TODO derive from RDF
+                  >>= return.((++) (experienceTitle (lang c))) 
+    pubList     = return $ (++) pubListTitle
+                  $ genericPublicationList g
+                  $ myPublications g s
+    teaching    = return $ (++) (teachingTitle (lang c))
+                  $ genericTeachingList g
+                  $ allCourses g
+    education   = readFile $ basedir ++  "education.tex"  -- TODO derive from RDF
+    talks       = readFile $ basedir ++ "talks.tex"   -- TODO derive from RDF
+    voluntaryWork = (readFile $ basedir ++ "volunteer.tex") -- TODO derive from RDF
+                    >>= return.((++) (volunteerTitle (lang c)))
+-- ToDo:    abilities, projects 
+    cvstructure = [ return $ documentclass c
+                  , latexHeader 
+                  , return $ contactInfo g
+                  , experience 
+                  , pubList 
+                  , education
+                  , talks
+                  , voluntaryWork
+                  , teaching
+                  , latexFooter]
+
+
+
+teachingTitle DE = "\\ecvSection{Lehrerfahrung}"
+teachingTitle EN = "\\ecvSection{Teaching \\ecvExperience}"
+teachingTitle _  = "\\ecvSection{Teaching}"
+
+experienceTitle _ = "\\ecvBreakSection{\\ecvExperience}"
+pubListTitle = "\\ecvSection{\\ecvPublications{}}"
+volunteerTitle _ = sectionStr "\\ecvVolunteer{}"
+
+pagebreak = "\\ecvPageBreak\n"
+
+sectionStr title = "\\ecvSection{" ++ title ++ "}\n"
+>>>>>>> 52e0241b7e40ddd318d7f01b6d8081768be36cf5
+-}
 
 documentclass:: LatexConfig -> Latex
 documentclass c = concat ["\\documentclass[",

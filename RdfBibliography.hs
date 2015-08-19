@@ -23,7 +23,6 @@ import qualified Data.RDF.Namespace as N
 import RdfHandler
 
 
-
 bibliographyMappings = N.mergePrefixMappings N.standard_ns_mappings $ N.ns_mappings [ bibo ]
 
 
@@ -105,12 +104,21 @@ abbreviationPred = R.unode $ T.pack ":abbreviation"
 
 ------------- RDF Handling --------------------------
 
+<<<<<<< HEAD
+
+typesOf = objectsByPred typePred
+typeOf  = (listToMaybe.).typesOf 
+=======
 
 listhead = Data.List.head
 
 typesOf = objectsByPred typePred
 typeOf  = (listToMaybe.).typesOf -- listhead.(typesOf g) 
+<<<<<<< HEAD
 
+=======
+>>>>>>> a777ac92c3c731b331d6cd061d9dce019ed9e3f6
+>>>>>>> 52e0241b7e40ddd318d7f01b6d8081768be36cf5
 authorsOf = objectsByPred authorPred
 editorsOf = objectsByPred editorPred
 titlesOf  = objectsByPred titlePred

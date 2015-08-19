@@ -9,7 +9,7 @@ version:             0.1.0.0
 license-file:        LICENSE
 author:              Lars Fischer
 maintainer:          das@larsipulami.de
--- copyright:           
+copyright:           GPLv3 
 category:            Database
 build-type:          Simple
 extra-source-files:  README.md, README.md~

@@ -4,7 +4,6 @@ import RdfHandler
 import qualified Data.RDF.Namespace as N
 
 
-
 foaf = N.foaf
 
 
