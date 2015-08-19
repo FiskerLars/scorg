@@ -6,7 +6,6 @@ import qualified Data.RDF.Namespace as N
 
 foaf = N.foaf
 
-
 {-| Functions to derive Objects Strings
 -}
 {-|

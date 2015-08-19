@@ -12,7 +12,6 @@ import LanguageSelector
 
 import Data.RDF.NS.Teach
 
-
 data LatexConfig = LatexConfig { lang:: Language
                                }
 
