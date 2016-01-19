@@ -33,36 +33,15 @@ import BibTeXInput
 import LatexOutput
 import LatexConfig
 import LanguageSelector
+import Options
+
+import CLIarguments
 
 import Data.RDF.CV
+import Data.RDF.GraphDB
 -- import Database.HSparql.QueryGenerator
 
 
-
-{-instance Observable R.TriplesGraph where
-  observer = observeBase
--}
-
-{-| Parser for turtle file int TriplesGraph
--}
-parseLocal:: String -> IO Graph
-parseLocal file = (R.parseFile (R.TurtleParser Nothing Nothing) file)
-                  >>= (\r -> 
-                        case r of
-                          (Left err ) -> error $ "Could not parse " ++ (file ++ (show err))-- return R.empty
-                          (Right rdf) -> return rdf )
-                                                               
-
-
-parseMergeLocal:: [String] -> IO Graph
-parseMergeLocal [] = return R.empty
-parseMergeLocal gs = (sequence $  map (parseLocal) gs)
-                     >>= return.mergeGraphs
-
-mergeGraphs:: [Graph] -> Graph 
-mergeGraphs gs =  (\(m,t) -> R.mkRdf t Nothing m)
-                  $ foldl (\(maps,triples) g -> (N.mergePrefixMappings maps (R.prefixMappings g)
-                                                 ,R.triplesOf g ++ triples )) (N.ns_mappings [],[]) gs 
 
     
 persons:: RDF r => r -> [R.Subject]
@@ -82,121 +61,10 @@ emailStringList gr = map (\s -> (show $ objectOf $ head $ query gr (Just s) (Jus
 
 
 
----------------------------------------------------------------------------------
--- Workers
-
---parseBibTeX:: String -> IO [Entry.T]
---bibTeXToRDF:: R.RDF a => [Entry.T] -> a
-printGraph::Worker
-printGraph g _ = putStrLn $ show g
-
-
-rdfCv:: Worker
-rdfCv g _ = putStrLn $ show $ cvParts g (R.bnode $ T.pack "_:me") 
-
-latexcv:: Worker
-latexcv g o = ((flip.flip genCvLatex) (R.unode $ T.pack "#me") (genLatexConfig o)) g
-              >>= putStrLn 
-
-
-latexlectures:: Worker
-latexlectures g _ = putStrLn $ ((flip genericTeachingList) (allCourses g) ) g
-                    
-genLatexConfig:: Options -> LatexConfig
-genLatexConfig o = LatexConfig {lang = language o}
-
-type Graph = R.TriplesGraph
-type Worker = Graph-> Options -> IO () 
-data Command = Command String Worker String
-commands:: [Command]
-commands = [ Command "cvlatex" latexcv
-             "Generate a CV of me in LaTeX"
-           , Command "lectureslatex" latexlectures
-             "Only the lectures part"
-           , Command "publicationlatex" undefined
-             "Only the Publications (for debugging)"
-           , Command "printGraph" printGraph
-             "Output the known graph"
-           , Command "www" undefined
-             "Create My Homepage"
-           , Command "rdfcv" rdfCv
-             "Test-Output the Cv Rdv (for debugging)"
-           , Command "" (\_ _ -> mainUi)
-             "Default: run the main ui"
-           ]
-
-
-
-
-{- lookup function matching cmd in List of commands -}
-lookupCmd:: [Command] -> String -> Maybe Worker
-lookupCmd cmds s = let
-  cmdName (Command cmd _ _) = cmd
-  in case (find (\c -> isPrefixOf s $ cmdName c) cmds) of
-    (Just (Command _ w _)) -> Just w
-    (Nothing)              -> Nothing
-
 
 -------------------------------------------------------------------
 --- CmdArguments
 
-
-
-type ArgStr = [String]
-
-
-data Options = Options
-     { inputGraphs :: [String]
-     , inputBibTex :: [String]
-     , language:: Language
-     , outputType:: String } deriving Show
-
-{-
-instance Observable Options where
-  observer = observeBase
--}
-
-defaultOptions = Options
-     { inputGraphs = []
-     , inputBibTex = []
-     , language = EN
-     , outputType = "rdf"
-     }
-
-
-mainoptions =
-  [ Option [] ["ib"]     (ReqArg (\s o -> o {inputBibTex =  inputBibTex o ++ [s] })
-                        "bibtex include" )
-    "Insert BibTex File"
-  , Option [] ["ig"] (ReqArg (\s o -> o { inputGraphs = inputGraphs o ++ [s] })
-                      "input include" )
-    "Insert a RDF (turtle) File"
-  , Option ['l'] ["lang"] (ReqArg (\s o -> o { language = read s })
-                           "language")
-    "Choose a language, default is en"
-  , Option ['o'] ["output"] (ReqArg (\s o -> o { outputType = s }) "output type")
-    "Select an output type."
-  ]
-
-
---- Startups
-
-mainUi:: IO ()                     
-mainUi = undefined -- parseLocal "/home/lars/etc/contacts.turtle" >>= (\g -> runUi g)-- return.emailStringList >>= print
-
-
-
-parseArgs:: IO (Worker, Options, [String])
-parseArgs = getArgs >>=
-            (\args ->
-              let (opts, nonOpts) = case getOpt Permute mainoptions args of
-                    (o,n,[])   -> ( foldl (flip id) defaultOptions o, n)
-                    (_,_,errs) -> error ("Error " ++ (concat errs ++ usageInfo "Usage: " mainoptions))
-                  (Just action) = lookupCmd commands $ case nonOpts of
-                    []    -> error "no command given"
-                    (c:_) -> c
-              in return (action, opts, nonOpts) 
-            )
 
 
 readGraphs:: Options -> IO Graph

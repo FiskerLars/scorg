@@ -1,9 +1,11 @@
 {-# LANGUAGE ScopedTypeVariables,
 OverloadedStrings, Rank2Types #-}
 
-{-|
+{-| runUI is main function
 -}
-module TextUi (runUi) where
+
+
+--module TextUi (runUi) where
 
 import Data.List
 
@@ -206,7 +208,7 @@ runSC :: [CursesH.CursesStyle] -> SCState -> SC a -> IO a
 runSC styles state sc = evalStateT sc state
 
 
---runUi::  RDF r => r ->  IO ()
+runUi::  RDF r => r ->  IO ()
 runUi gr = do runit gr `finally` CursesH.end
   where
     --    runit:: RDF r => r -> IO ()
@@ -216,3 +218,5 @@ runUi gr = do runit gr `finally` CursesH.end
          Curses.cursSet Curses.CursorInvisible
          runSC cstyles (SCState r cstyles) textUiMain
                       
+
+
