@@ -33,7 +33,10 @@ import BibTeXInput
 import LatexOutput
 import LatexConfig
 import LanguageSelector
+
 import Data.RDF.CV
+-- import Database.HSparql.QueryGenerator
+
 
 
 {-instance Observable R.TriplesGraph where

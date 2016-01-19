@@ -314,7 +314,7 @@ genCvLatex g s c = (sequence $ cvstructure )
                   $ allEmployments g meNode 
     pubList     = return $ (++) (ecvPubListTitle c)
                   $ genericPublicationList g
-                  $ myPublications g s
+                  $ cvPublications g s
     teaching    = return $ (++) (ecvTeachingTitle c)
                   $ genericTeachingList g
                   $ allCourses g
@@ -338,34 +338,6 @@ genCvLatex g s c = (sequence $ cvstructure )
 
 
 
-{-| Example List of Publications.
-TODO: fill up with my publications.
-TODO: read from generic config/RDF (better use RDF-graph to determine them)
--}
-myPublications :: R.RDF a => a -> R.Subject -> [R.Subject]
-myPublications g s = map ((checknode g).publicationNode)
-                     [ "fischer06:_secur_revoc_anony_authen_inter"
-                     , "Doetzer2005a"
-                     -- , "Fischer2010"
-                     , "Fischer2008"
-                     , "fischer08:measuringunlinkabilityrevisited"
-                     , "Stumpf2007"
-                     , "Fischer14PaymentSystemsDistributed"
-                     , "Fischer14ProbabilisticPointProcesses"
-                     , "Fisch2012MeasuringUnlinkabilityPrivacy"
-                     , "Fischer03ProtectingIntegrityand"
-                     , "FD14DesignandImplementation"
-                     , "FischDK2011LinkGlobally-"
-                     , "FHB+12EnhancingPrivacyin"
-                     , "Fischer2011"
-                     , "FHH13IndoorPositioningby"
-                     , "HFB+2Contextawaretrust"
-                     , "Karatas2014"
-                     , "WesteFPK201150BucksAttack"]
-  where
-    checknode g n = case R.rdfContainsNode g n of
-      True -> n
-      False -> error $ "node " ++ (R.view n) ++ " does not exist in graph"
 
 
 
