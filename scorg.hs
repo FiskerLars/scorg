@@ -45,7 +45,7 @@ import Data.RDF.CV
 
 {-| Parser for turtle file int TriplesGraph
 -}
-parseLocal:: String -> IO R.TriplesGraph
+parseLocal:: String -> IO Graph
 parseLocal file = (R.parseFile (R.TurtleParser Nothing Nothing) file)
                   >>= (\r -> 
                         case r of
@@ -54,12 +54,12 @@ parseLocal file = (R.parseFile (R.TurtleParser Nothing Nothing) file)
                                                                
 
 
-parseMergeLocal:: [String] -> IO R.TriplesGraph
+parseMergeLocal:: [String] -> IO Graph
 parseMergeLocal [] = return R.empty
 parseMergeLocal gs = (sequence $  map (parseLocal) gs)
                      >>= return.mergeGraphs
 
-
+mergeGraphs:: [Graph] -> Graph 
 mergeGraphs gs =  (\(m,t) -> R.mkRdf t Nothing m)
                   $ foldl (\(maps,triples) g -> (N.mergePrefixMappings maps (R.prefixMappings g)
                                                  ,R.triplesOf g ++ triples )) (N.ns_mappings [],[]) gs 
@@ -186,22 +186,34 @@ mainUi = undefined -- parseLocal "/home/lars/etc/contacts.turtle" >>= (\g -> run
 
 
 
+parseArgs:: IO (Worker, Options, [String])
+parseArgs = getArgs >>=
+            (\args ->
+              let (opts, nonOpts) = case getOpt Permute mainoptions args of
+                    (o,n,[])   -> ( foldl (flip id) defaultOptions o, n)
+                    (_,_,errs) -> error ("Error " ++ (concat errs ++ usageInfo "Usage: " mainoptions))
+                  (Just action) = lookupCmd commands $ case nonOpts of
+                    []    -> error "no command given"
+                    (c:_) -> c
+              in return (action, opts, nonOpts) 
+            )
+
+
+readGraphs:: Options -> IO Graph
+readGraphs opts = do
+  bg <- bibtexGraphs    $ inputBibTex opts
+  lg <- parseMergeLocal $ inputGraphs opts
+  return (mergeGraphs [bg, lg]) 
+
+bibtexGraphs bf = (sequence $ map (parseBibTeX) bf)
+                  >>= (\x -> (return.bibTeXToRDF.concat) x:: IO R.TriplesGraph)
+
 
 main:: IO ()
 main = --runO $
        do
-         args <-  getArgs 
-         let (opts, nonOpts) = case getOpt Permute mainoptions args of
-               (o,n,[])   -> ( foldl (flip id) defaultOptions o, n)
-               (_,_,errs) -> error ("Error " ++ (concat errs ++ usageInfo "Usage: " mainoptions))
-             (Just action) = lookupCmd commands $ case nonOpts of
-               []    -> error "no command given"
-               (c:_) -> c
-         bg <- bibtexGraphs    $ inputBibTex opts
-         lg <- parseMergeLocal $ inputGraphs opts
-         action (mergeGraphs [bg, lg]) opts
-       where
-         bibtexGraphs bf = (sequence $ map (parseBibTeX) bf)
-                           >>= (\x -> (return.bibTeXToRDF.concat) x:: IO R.TriplesGraph)
-                           
+         (action, opts, nonOpts) <- parseArgs
+         graph <- readGraphs opts
+         action graph opts
+
          
