@@ -10,6 +10,7 @@ import qualified Data.Text as T
 import LatexOutput
 import LatexConfig
 import Options
+import UI
 import Data.RDF.GraphDB (Graph)
 ---------------------------------------------------------------------------------
 -- Workers
@@ -37,8 +38,8 @@ genLatexConfig:: Options -> LatexConfig
 genLatexConfig o = LatexConfig {lang = language o}
 
 
-mainUi:: IO ()                     
-mainUi = undefined -- parseLocal "/home/lars/etc/contacts.turtle" >>= (\g -> runUi g)-- return.emailStringList >>= print
+mainUi:: Worker                     
+mainUi g _ = runUi g -- parseLocal "/home/lars/etc/contacts.turtle" >>= (\g -> runUi g)-- return.emailStringList >>= print
 
 
 
@@ -56,7 +57,7 @@ commands = [ Command "cvlatex" latexcv
              "Create My Homepage"
            , Command "rdfcv" rdfCv
              "Test-Output the Cv Rdv (for debugging)"
-           , Command "" (\_ _ -> mainUi)
+           , Command "mainUi" mainUi
              "Default: run the main ui"
            ]
 

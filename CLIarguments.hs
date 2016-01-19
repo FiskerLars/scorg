@@ -47,7 +47,7 @@ parseArgs = getArgs >>=
                     (o,n,[])   -> ( foldl (flip id) defaultOptions o, n)
                     (_,_,errs) -> error ("Error " ++ (concat errs ++ usageInfo "Usage: " mainoptions))
                   (Just action) = lookupCmd commands $ case nonOpts of
-                    []    -> error "no command given"
+                    []    -> "mainUi" --error "no command given"
                     (c:_) -> c
               in return (action, opts, nonOpts) 
             )

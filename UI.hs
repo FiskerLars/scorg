@@ -5,7 +5,7 @@ OverloadedStrings, Rank2Types #-}
 -}
 
 
---module TextUi (runUi) where
+module UI (runUi) where
 
 import Data.List
 
@@ -21,6 +21,7 @@ import qualified UI.HSCurses.CursesHelper as CursesH
 import Data.RDF as R
 import qualified Data.Text as T
 
+import Data.RDF.GraphDB
 
 {-| Current internal state
 -}
@@ -208,7 +209,7 @@ runSC :: [CursesH.CursesStyle] -> SCState -> SC a -> IO a
 runSC styles state sc = evalStateT sc state
 
 
-runUi::  RDF r => r ->  IO ()
+runUi::  Graph ->  IO ()
 runUi gr = do runit gr `finally` CursesH.end
   where
     --    runit:: RDF r => r -> IO ()
