@@ -24,19 +24,26 @@ import Data.RDF.Query as Q
 import qualified Data.Text as T
 import System.Environment
 import System.Console.GetOpt
+import RdfHandler
 
 import Debug.Trace
 -- import Debug.Hood.Observe
 
 -- import TextUi
 import BibTeXInput
-import LatexOutput
+import LatexCV
 import LatexConfig
 import LanguageSelector
+import TextUi
 
 import Data.RDF.CV
 -- import Database.HSparql.QueryGenerator
 
+type Graph = RDFdb
+
+
+testding:: RDFdb -> String
+testding g = "<test> <has> <tist>"
 
 
 {-instance Observable R.TriplesGraph where
@@ -45,7 +52,7 @@ import Data.RDF.CV
 
 {-| Parser for turtle file int TriplesGraph
 -}
-parseLocal:: String -> IO R.TriplesGraph
+parseLocal:: String -> IO RDFdb
 parseLocal file = (R.parseFile (R.TurtleParser Nothing Nothing) file)
                   >>= (\r -> 
                         case r of
@@ -54,8 +61,8 @@ parseLocal file = (R.parseFile (R.TurtleParser Nothing Nothing) file)
                                                                
 
 
-parseMergeLocal:: [String] -> IO R.TriplesGraph
-parseMergeLocal [] = return R.empty
+parseMergeLocal:: [String] -> IO RDFdb
+parseMergeLocal [] = return (empty ::RDFdb) 
 parseMergeLocal gs = (sequence $  map (parseLocal) gs)
                      >>= return.mergeGraphs
 
@@ -65,7 +72,7 @@ mergeGraphs gs =  (\(m,t) -> R.mkRdf t Nothing m)
                                                  ,R.triplesOf g ++ triples )) (N.ns_mappings [],[]) gs 
 
     
-persons:: RDF r => r -> [R.Subject]
+persons:: RDFdb -> [R.Subject]
 persons g = map Q.subjectOf
             $ query g (Nothing)
                       (Just $ unode "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
@@ -73,7 +80,7 @@ persons g = map Q.subjectOf
 
 
 {- List all Persons (by name) and related email addresses -}
-emailStringList:: RDF r => r -> [(String,[String])]
+emailStringList:: RDFdb -> [(String,[String])]
 emailStringList gr = map (\s -> (show $ objectOf $ head $ query gr (Just s) (Just $ unode "http://xmlns.com/foaf/spec/name") Nothing,
                                  map (show.objectOf) $ query gr (Just s) (Just $ unode "http://xmlns.com/foaf/spec/mbox") Nothing))
                      $ persons gr
@@ -85,32 +92,39 @@ emailStringList gr = map (\s -> (show $ objectOf $ head $ query gr (Just s) (Jus
 ---------------------------------------------------------------------------------
 -- Workers
 
+type Worker = Graph-> Options -> IO () 
+
 --parseBibTeX:: String -> IO [Entry.T]
 --bibTeXToRDF:: R.RDF a => [Entry.T] -> a
+
 printGraph::Worker
 printGraph g _ = putStrLn $ show g
 
-
 rdfCv:: Worker
-rdfCv g _ = putStrLn $ show $ cvParts g (R.bnode $ T.pack "_:me") 
+rdfCv g o = either (printErr) ( putStrLn.show.(cvParts g).(R.unode).(T.pack) )
+  $ rootSubject o
+  
 
 latexcv:: Worker
-latexcv g o = ((flip.flip genCvLatex) (R.unode $ T.pack "#me") (genLatexConfig o)) g
-              >>= putStrLn 
-
+latexcv g o = either
+  printErr 
+  (\s -> (flip.flip genCvLatex) (R.unode $ T.pack s) (genLatexConfig o) g >>= putStrLn )
+  (rootSubject o)
 
 latexlectures:: Worker
-latexlectures g _ = putStrLn $ ((flip genericTeachingList) (allCourses g) ) g
-                    
+latexlectures g = (either
+                   printErr
+                   (\s -> putStrLn $ ((flip genericTeachingList)
+                                      $ allCourses g (R.unode $ T.pack s) 
+                                     ) g)
+                  ).rootSubject
 genLatexConfig:: Options -> LatexConfig
 genLatexConfig o = LatexConfig {lang = language o}
 
-type Graph = R.TriplesGraph
-type Worker = Graph-> Options -> IO () 
 data Command = Command String Worker String
 commands:: [Command]
 commands = [ Command "cvlatex" latexcv
-             "Generate a CV of me in LaTeX"
+             "Generate a CV of <http://larsipulami.de/me> in LaTeX"
            , Command "lectureslatex" latexlectures
              "Only the lectures part"
            , Command "publicationlatex" undefined
@@ -121,8 +135,10 @@ commands = [ Command "cvlatex" latexcv
              "Create My Homepage"
            , Command "rdfcv" rdfCv
              "Test-Output the Cv Rdv (for debugging)"
-           , Command "" (\_ _ -> mainUi)
-             "Default: run the main ui"
+           , Command "gui" (\_ _ -> mainUi)
+             "Run the main ui" 
+           , Command "help"(\_ _ -> printUsage)
+             "Show help text"
            ]
 
 
@@ -149,18 +165,24 @@ data Options = Options
      { inputGraphs :: [String]
      , inputBibTex :: [String]
      , language:: Language
-     , outputType:: String } deriving Show
+     , outputType:: String
+     , rootSubject:: Either String String 
+     } deriving Show
 
 {-
 instance Observable Options where
   observer = observeBase
 -}
 
+printErr:: String -> IO ()
+printErr = (>> printUsage).putStrLn
+
 defaultOptions = Options
      { inputGraphs = []
      , inputBibTex = []
      , language = EN
      , outputType = "rdf"
+     , rootSubject = Left "no Subject URL given" -- R.unode $ T.pack "http://larsipulami.de/lars_fischer#me"
      }
 
 
@@ -174,26 +196,33 @@ mainoptions =
   , Option ['l'] ["lang"] (ReqArg (\s o -> o { language = read s })
                            "language")
     "Choose a language, default is en"
-  , Option ['o'] ["output"] (ReqArg (\s o -> o { outputType = s }) "output type")
+  , Option ['o'] ["output"] (ReqArg (\s o -> o { outputType = s })
+                             "output type")
     "Select an output type."
+  , Option ['s'] ["subject"] (OptArg (\s o -> o { rootSubject = maybe (rootSubject defaultOptions) (Right) s})
+                             "IRI")
+    "Subject used as reference root for some operations, e.g. Person to generate a CV of, point of view of operations"
   ]
 
 
 --- Startups
 
+
 mainUi:: IO ()                     
-mainUi = undefined -- parseLocal "/home/lars/etc/contacts.turtle" >>= (\g -> runUi g)-- return.emailStringList >>= print
+mainUi =  parseFile (TurtleParser Nothing Nothing) "/home/lars/etc/contacts.turtle" >>= either (putStrLn.show) (\g -> runUi g)-- return.emailStringList >>= print
 
 
 
+printUsage:: IO ()
+printUsage = putStrLn (usageInfo "Usage: " mainoptions)
 
 main:: IO ()
-main = --runO $
+main = 
        do
          args <-  getArgs 
          let (opts, nonOpts) = case getOpt Permute mainoptions args of
-               (o,n,[])   -> ( foldl (flip id) defaultOptions o, n)
-               (_,_,errs) -> error ("Error " ++ (concat errs ++ usageInfo "Usage: " mainoptions))
+               (o, n, [])   -> ( foldl (flip id) defaultOptions o, n)
+               (_, _, errs) -> error ("Error " ++ (concat errs ++ usageInfo "Usage: " mainoptions))
              (Just action) = lookupCmd commands $ case nonOpts of
                []    -> error "no command given"
                (c:_) -> c
@@ -202,6 +231,6 @@ main = --runO $
          action (mergeGraphs [bg, lg]) opts
        where
          bibtexGraphs bf = (sequence $ map (parseBibTeX) bf)
-                           >>= (\x -> (return.bibTeXToRDF.concat) x:: IO R.TriplesGraph)
+                           >>= (\x -> (return.bibTeXToRDF.concat) x:: IO RDFdb)
                            
          

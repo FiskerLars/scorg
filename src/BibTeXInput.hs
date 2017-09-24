@@ -80,7 +80,7 @@ mapEntryOntoSubj s e = case sequence
 {-| generate a graph (maybe even collate authors)
 TODO: differentiate different classes of publications
 -}
-bibTeXToRDF:: R.RDF a => [Entry.T] -> a
+bibTeXToRDF::  [Entry.T] -> RDFdb
 bibTeXToRDF entries = pubGraph $ foldr (\e t ->  newPublication e ++ t) [] entries 
   where
     newPublication e = R.triple (publicationNode (Entry.identifier e))  

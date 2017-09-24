@@ -20,10 +20,10 @@ defaultLatexConfig :: LatexConfig
 defaultLatexConfig = LatexConfig { lang = EN }
 
 
-allCourses:: R.RDF a => a -> [R.Subject]
-allCourses g = map R.subjectOf
+allCourses:: RDFdb -> R.Subject -> [R.Subject]
+allCourses g subj = map R.subjectOf
               $ R.query g
               Nothing
               (Just (mkUnode' teach "teacher"))
-              (Just (R.unode $ T.pack "http://larsipulami.de/lars_fischer#me"))
+              (Just subj)
 

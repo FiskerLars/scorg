@@ -16,14 +16,15 @@ import UI.HSCurses.Widgets
 import qualified UI.HSCurses.Curses as Curses
 import qualified UI.HSCurses.CursesHelper as CursesH
 
-import Data.RDF as R
+import Data.RDF
+
 import qualified Data.Text as T
 
 
 {-| Current internal state
 -}
 data SCState = SCState
-               { graph :: R.TriplesGraph -- RDF r => r
+               { graph :: RDF TList --TriplesList -- R.TList -- RDF r => r
                , sc_styles:: [CursesH.CursesStyle]
                }
 
@@ -206,13 +207,13 @@ runSC :: [CursesH.CursesStyle] -> SCState -> SC a -> IO a
 runSC styles state sc = evalStateT sc state
 
 
---runUi::  RDF r => r ->  IO ()
-runUi gr = do runit gr `finally` CursesH.end
+runUi::  RDF TList ->  IO ()
+runUi graph = do runit graph `finally` CursesH.end
   where
-    --    runit:: RDF r => r -> IO ()
-    runit r =
+    runit:: RDF TList -> IO ()
+    runit g =
       do CursesH.start -- :: IO ()
          cstyles <- CursesH.convertStyles styles
          Curses.cursSet Curses.CursorInvisible
-         runSC cstyles (SCState r cstyles) textUiMain
+         runSC cstyles (SCState g cstyles) textUiMain
                       

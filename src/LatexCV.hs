@@ -1,6 +1,6 @@
 {-| Generate Latex Output from the graph. Currently implements my CV
 -}
-module LatexOutput (Latex,
+module LatexCV (Latex,
                     genericPublicationList
                    , genericTeachingList
                    , genCvLatex)
@@ -47,6 +47,12 @@ latexCommasAnd [x,y] = x ++ " and " ++ y
 latexCommasAnd (x:xs) = x ++ ", " ++ latexCommasAnd xs
 latexCommasAnd [] = ""
 
+
+latexOutputEncode:: Latex -> Latex
+latexOutputEncode = replaceString "&" "\\&"
+
+
+
 {-|
 The following part utilises the ecv-plus latex class to generate a publication list from a given list of ordered BibTeX identifiers.
 
@@ -67,11 +73,11 @@ International Confernce on Future Generation Communication 2012, At London, UK
 
 \ecvTagPlainValueRagged{}
 {Heupel, M.; Fischer, L.;  Bourimi, M.; Kesdoǧan, D. Scerri, S.; Hermann, F.; Gimenez, R.\\
-\emph{Context-aware, trust-based access control for the digital.me userware}\\
+\emph{Context-aware, trust-based access control for the digital.<http://larsipulami.de/me> userware}\\
 proceedings o 2012 5th IFIP International Conference on New Technologies, Mobility and Security (NTMS)}\\
 
 -}
-ecvPublicationRight:: R.RDF a => a -> R.Subject -> Latex
+ecvPublicationRight:: RDFdb -> R.Subject -> Latex
 ecvPublicationRight g s = '{': (intercalate "\\\\\n" [authors,
                                                       title,
                                                       publicationdata]
@@ -98,7 +104,7 @@ ecvGenericLeftSide:: String -> Latex
 ecvGenericLeftSide s = "\\ecvTagPlainValueRagged{" ++ s ++ "}"
 {-| Given an ordered list of publications (RDF subjects), generate entry list.
 -}
-publicationYear:: R.RDF a => a -> [R.Subject] -> Latex
+publicationYear:: RDFdb -> [R.Subject] -> Latex
 publicationYear _ [] = mempty
 publicationYear g xs@(s:ss) = foldr (\(l,r) x -> l ++ r ++ x) mempty
                               $ zip
@@ -113,7 +119,7 @@ publicationYear g xs@(s:ss) = foldr (\(l,r) x -> l ++ r ++ x) mempty
 {-| Only the first entry of every year displays the year in the left column. This is the function to call
 TODO: sortByYear
 -}
-genericPublicationList:: R.RDF a => a ->  [R.Subject] -> Latex
+genericPublicationList:: RDFdb ->  [R.Subject] -> Latex
 genericPublicationList g xs = foldr (\ys l -> publicationYear g ys ++ l) mempty
                               $ groupByYear g
                               $ reverse
@@ -141,12 +147,12 @@ lectureTypeObj  = mkUnode' teach "Lecture"
 latexAppendMaybe::  Maybe [a] -> [a] -> [a]
 latexAppendMaybe a b = fromMaybe mempty $ a >>= return.(++ b)
 
-teachRightHandEntry:: R.RDF a => a -> R.Subject ->  Latex
+teachRightHandEntry:: RDFdb -> R.Subject ->  Latex
 teachRightHandEntry g s = fromMaybe "" ((typeOf g s >>= eventTypeStr) >>= return.(++ ": "))
                           ++ (maybe "" (R.view) (titleOf g s)) 
                           where
                             academicTermStr g s = maybe "" (R.view) 
-                                                  $ (academicTermOf g s) >>= (nameOf g) 
+                                                  $ (academicTermObj g s) >>= (nameOf g) 
                             eventTypeStr e | e == practiseTypeObj = Just "Practise"
                                            | e == seminarTypeObj  = Just "Seminar"
                                            | e == lectureTypeObj  = Just "Lecture"
@@ -161,22 +167,22 @@ teachRightHandEntry g s = fromMaybe "" ((typeOf g s >>= eventTypeStr) >>= return
 
 
 
-teachLatexYear:: R.RDF a => a ->  [R.Subject] -> Latex
+teachLatexYear:: RDFdb ->  [R.Subject] -> Latex
 teachLatexYear g xs =  -- observe "teachLatexYear" $
                         foldr (\(l,r) x -> l ++ r ++ x) mempty
                        $ zip
-                         ((ecvGenericLeftSide $ maybe "" (shortNameOf g) (academicTermOf g $ head xs))
+                         ((ecvGenericLeftSide $ maybe "" (shortNameOf g) (academicTermObj g $ head xs))
                           :(repeat $ ecvGenericLeftSide ""))
                          $ map (\x -> "{" ++ (teachRightHandEntry g x) ++ "}\n") xs
   where
-    shortNameOf:: R.RDF a => a -> R.Subject -> String
+    shortNameOf:: RDFdb -> R.Subject -> String
     shortNameOf g s = maybe "" (R.view) (nameOf g s) -- TODO use abbrev
 
 
 
 {- removed by Merge -}
 
-genericTeachingList:: R.RDF a => a -> [R.Subject] -> Latex
+genericTeachingList:: RDFdb -> [R.Subject] -> Latex
 genericTeachingList g = intercalate("\n")
                         .(map $ (teachLatexYear g))
                         .(groupByAcademicTerm g)
@@ -190,22 +196,22 @@ genericTeachingList g = intercalate("\n")
 
 
 {- Generate LaTeX Contact Infos -}
-ecvContactData:: R.RDF a => LatexConfig -> a -> Latex
-ecvContactData c g = "\\ecvTagPlainValueRagged{}{\\ecvBold{" ++ foafNameView g ++" }\\\\\n"
-                     ++ replaceString (foafTitleView g) "." ".\\,"
+ecvContactData:: LatexConfig -> RDFdb -> R.Subject -> Latex
+ecvContactData c g s = "\\ecvTagPlainValueRagged{}{\\ecvBold{" ++ foafNameView g s ++" }\\\\\n"
+                     ++ replaceString "." ".\\," (foafTitleView g s) 
                      ++ "Dipl.-Inf.}\n"
                      ++ "\\ecvNewLine\n"
                      ++ "\\ecvTagPlainValueRagged{\\ecvContact}\n"
                      ++ "{" ++ vcardStreetAddrView g mvAddrCard ++ "\\\\\n" 
                      ++ vcPostalCodeView g mvAddrCard ++ " " ++ vcLocalityView g mvAddrCard ++ "\\\\[1mm]\n" 
-                     ++ "\\ecvMobile: " ++ replaceString (vcCellphoneView g (filterVcCells g mvPhoneCards)) "tel" "" ++ "\\\\\n" -- TODO prettyprint number
-                     ++ "\\ecvEmail: \\ecvHyperEMail{"++ foafMboxView g ++ "}\\\\\n"
-                     ++ "\\ecvHyperLink{"++ foafHomepageView g ++"}"
+                     ++ "\\ecvMobile: " ++ replaceString "tel" ""  (vcCellphoneView g (filterVcCells g mvPhoneCards)) ++ "\\\\\n" -- TODO prettyprint number
+                     ++ "\\ecvEmail: \\ecvHyperEMail{"++ foafMboxView g s ++ "}\\\\\n"
+                     ++ "\\ecvHyperLink{"++ foafHomepageView g s ++"}"
                      ++ "}\n"
                      
   where
-    mvAddrCard = listToMaybe $ vcardHasAddressPred g meNode
-    mvPhoneCards = mvcPhoneNodes g meNode
+    mvAddrCard = listToMaybe $ vcardHasAddressPred g s
+    mvPhoneCards = mvcPhoneNodes g s
 
 
 ecvTeachingTitle:: LatexConfig -> Latex
@@ -253,7 +259,7 @@ ecvEmploymentInterval conf (BioInterval from to) = case map (ecvDate conf) [from
 
 {-| Display an employment entry.
 |-}
-ecvEmploymentEntry:: R.RDF a => LatexConfig -> a -> R.Subject  -> Latex
+ecvEmploymentEntry:: LatexConfig -> RDFdb -> R.Subject  -> Latex
 ecvEmploymentEntry conf g e  = "\\ecvTagPlainValueRagged{"
                               ++ (fromMaybe
                                   "{\\bf no interval given}"
@@ -267,20 +273,22 @@ ecvEmploymentEntry conf g e  = "\\ecvTagPlainValueRagged{"
                               ++ "}\n"
 
 
-ecvMultilineFirstBold:: R.RDF a => LatexConfig -> a -> R.Subject  -> R.Predicate -> Latex
+ecvMultilineFirstBold:: LatexConfig -> RDFdb -> R.Subject  -> R.Predicate -> Latex
 ecvMultilineFirstBold conf g e p = case filter isLNode $ queryObjects g e p of
   [] -> ""
   list -> intercalate "\\\\\n"
           $ (\(l:ls) -> (:) ("\\ecvBold{" ++ l ++  "}") ls) 
           $ lines
+          $ latexOutputEncode
           $ R.view
           $ languageSelect (lang conf) list
 
 
-ecvMultilineString:: R.RDF a => LatexConfig -> a -> R.Subject  -> R.Predicate -> Latex
+ecvMultilineString:: LatexConfig -> RDFdb -> R.Subject  -> R.Predicate -> Latex
 ecvMultilineString conf g e p = case filter isLNode $ queryObjects g e p of
   [] -> ""
   list -> intercalate "\\\\\n" $ lines
+          $ latexOutputEncode
           $ R.view
           $ languageSelect (lang conf) list
 
@@ -289,13 +297,13 @@ ecvMultilineString conf g e p = case filter isLNode $ queryObjects g e p of
     
 
 
-ecvFormatEmployments:: R.RDF a => LatexConfig -> a ->  [R.Subject]  -> Latex
-ecvFormatEmployments conf g = (intercalate "\n")
-                              .(map (ecvEmploymentEntry conf g))
+ecvFormatEmployments:: LatexConfig -> RDFdb ->  [R.Subject]  -> Latex
+ecvFormatEmployments conf g es = (intercalate "\n")
+  $ (map (ecvEmploymentEntry conf g)) es
 
 {-| generate a CV of a given person (english default)
 -}
-genCvLatex:: R.RDF a => a -> R.Subject -> LatexConfig ->  IO Latex
+genCvLatex:: RDFdb -> R.Subject -> LatexConfig ->  IO Latex
 genCvLatex g s c = (sequence $ cvstructure )
                    >>= return.(foldr ((++)) "")
   where
@@ -311,13 +319,13 @@ genCvLatex g s c = (sequence $ cvstructure )
                   $ ecvFormatEmployments c g
                   $ (\e -> trace ("sorted: " ++ show e) e)
                   $ sortEmployments g
-                  $ allEmployments g meNode 
+                  $ allEmployments g s 
     pubList     = return $ (++) (ecvPubListTitle c)
                   $ genericPublicationList g
                   $ cvPublications g s
     teaching    = return $ (++) (ecvTeachingTitle c)
                   $ genericTeachingList g
-                  $ allCourses g
+                  $ allCourses g s
     education   = readFile $ basedir ++  "education.tex"  -- TODO derive from RDF
     talks       = readFile $ basedir ++ "talks.tex"   -- TODO derive from RDF
     voluntaryWork = (readFile $ basedir ++ "volunteer.tex") -- TODO derive from RDF
@@ -325,7 +333,7 @@ genCvLatex g s c = (sequence $ cvstructure )
 -- ToDo:    abilities, projects 
     cvstructure = [ return $ documentclass c
                   , latexHeader 
-                  , return $ ecvContactData c g
+                  , return $ ecvContactData c g s
 --                  , experienceFile
                   , experience
                   , (return ecvNewPage)
@@ -355,9 +363,9 @@ genCvLatex g s c = (sequence $ cvstructure )
 
 >>>>>>> 52e0241b7e40ddd318d7f01b6d8081768be36cf5
 {- Generate LaTeX Contact Infos -}
-contactInfo:: R.RDF a => a -> Latex
+contactInfo:: RDFdb -> Latex
 contactInfo g = "\\ecvTagPlainValueRagged{}{\\ecvBold{" ++ foafNameView g ++" }\\\\\n"
-                ++ replaceString (foafTitleView g) "." ".\\,"
+                ++ replaceString "." ".\\," (foafTitleView g)
                 ++ "Dipl.-Inf.}\n"
                 ++ "\\ecvNewLine\n"
                 ++ "\\ecvTagPlainValueRagged{\\ecvContact}\n"
@@ -374,7 +382,7 @@ contactInfo g = "\\ecvTagPlainValueRagged{}{\\ecvBold{" ++ foafNameView g ++" }\
                    
 {-| generate a CV of a given person (english default)
 -}
-genCvLatex:: R.RDF a => a -> R.Subject -> LatexConfig ->  IO Latex
+genCvLatex:: RDFdb -> R.Subject -> LatexConfig ->  IO Latex
 genCvLatex g s c = (sequence $ cvstructure )
                  >>= return.(foldr ((++)) "")
   where

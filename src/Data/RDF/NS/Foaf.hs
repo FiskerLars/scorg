@@ -10,10 +10,10 @@ foaf = N.foaf
 -}
 {-|
 -}
-foafTitleView g = headObjViewMod g "" (\s -> s++"\\\\\n") meNode foafTitle 
-foafNameView g = headObjView g "Name of Subject Missing" meNode foafName
-foafMboxView g = headObjView g "Mailaddr missing" meNode foafMbox
-foafHomepageView g = headObjView g "Homepage missing" meNode foafHomepage
+foafTitleView g s = headObjViewMod g "" (\s -> s++"\\\\\n") s foafTitle 
+foafNameView g s = headObjView g "Name of Subject Missing" s foafName
+foafMboxView g s = headObjView g "Mailaddr missing" s foafMbox
+foafHomepageView g s = headObjView g "Homepage missing" s foafHomepage
 
 
 {-| Relation Nodes

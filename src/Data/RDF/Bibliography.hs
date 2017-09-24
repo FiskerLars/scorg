@@ -27,7 +27,7 @@ import RdfHandler
 bibliographyMappings = N.mergePrefixMappings N.standard_ns_mappings $ N.ns_mappings [ bibo ]
 
 
-pubGraph:: R.RDF a => R.Triples -> a
+pubGraph::  R.Triples -> RDFdb
 pubGraph triples = R.mkRdf triples Nothing bibliographyMappings
   where
     addPubPrefix g = R.addPrefixMappings g bibliographyMappings True
@@ -42,6 +42,7 @@ publicationNode id = (R.bnode $ T.pack $ ":" ++ id)
 
 authorPred = mkUnode' dct "creator"
 editorPred = mkUnode' bibo "editor"
+
 author:: TripleGenFkt
 author = flip literalTriple authorPred 
 
@@ -126,19 +127,19 @@ timestampOf   = (listToMaybe.).timestampsOf
 
 
 {- Group subjects by year-attribute -}
-groupByYear:: R.RDF a => a -> [R.Subject] -> [[R.Subject]]
+groupByYear:: RDFdb -> [R.Subject] -> [[R.Subject]]
 groupByYear g  = groupBy (\s s' ->  (yearInt g s) == (yearInt g s'))
                    -- map (\s -> (s, yearOf g s)) xs
 
 
-cmpSubjYear::  R.RDF a => a -> R.Subject -> R.Subject -> Maybe Ordering
+cmpSubjYear::  RDFdb -> R.Subject -> R.Subject -> Maybe Ordering
 cmpSubjYear g s s' = pure compare <*> (yearInt g s) <*> (yearInt g s') 
 
 {- Comparision function for Year Attributes -}
-compareSubjectYear:: R.RDF a => a -> R.Subject -> R.Subject -> Ordering
+compareSubjectYear:: RDFdb -> R.Subject -> R.Subject -> Ordering
 compareSubjectYear g s s' = case cmpSubjYear g s s' of
   (Nothing) -> EQ
   (Just x ) -> x
   
-yearInt:: R.RDF a => a -> R.Subject -> Maybe Integer
+yearInt:: RDFdb -> R.Subject -> Maybe Integer
 yearInt g s = pure (read.(R.view)) <*> (yearOf g s) 

@@ -3,7 +3,7 @@ module Strings (replaceString) where
 import Data.List
 
 replaceString:: String -> String -> String -> String
-replaceString str old new =
+replaceString old new str =
   mapSubstrAcc (\s@(x:xs) -> 
                  case stripPrefix old s of
                    (Just rem) -> (rem, (++) new) 
